@@ -58,6 +58,13 @@ let soloGameState = {
   rounds: 0,
 }
 
+function getSoloRoundTtlMs(mode, roundIndex) {
+  const config = DIFFICULTIES[mode] || DIFFICULTIES.normal
+  const firstRoundMs = 15000
+  const stepDownMs = 1200
+  return Math.max(config.ttlMs, firstRoundMs - roundIndex * stepDownMs)
+}
+
 function parseRoute() {
   const hash = window.location.hash || '#/'
   const [pathPart, queryString = ''] = hash.slice(1).split('?')
@@ -343,6 +350,7 @@ function renderHome() {
 }
 
 async function renderSoloKiosk() {
+  app.classList.add('kiosk-app')
   const baseUrl = getQrBaseUrl()
   app.innerHTML = `
     <main class="page kiosk-page">
@@ -516,6 +524,9 @@ async function generateSoloToken(runId) {
   const select = document.querySelector('#difficulty')
   const mode = select?.value || 'normal'
   const config = DIFFICULTIES[mode] || DIFFICULTIES.normal
+  const ttlMs = soloGameState.active
+    ? getSoloRoundTtlMs(mode, soloGameState.rounds)
+    : config.ttlMs
   const message = MESSAGES[Math.floor(Math.random() * MESSAGES.length)]
   const now = Date.now()
   const tokenId = crypto.randomUUID ? crypto.randomUUID() : `token-${now}`
@@ -528,7 +539,7 @@ async function generateSoloToken(runId) {
     base: message.base,
     mode,
     createdAt: now,
-    expiresAt: now + config.ttlMs,
+    expiresAt: now + ttlMs,
   }
 
   currentSoloRound = payload
@@ -552,7 +563,7 @@ async function generateSoloToken(runId) {
   const hint = document.querySelector('#hint')
   if (qr) qr.src = qrDataUrl
   if (qrNode) qrNode.classList.remove('hidden')
-  if (meta) meta.textContent = `${config.label} | ${message.text} | Veljavnost: ${Math.round(config.ttlMs / 1000)} s`
+  if (meta) meta.textContent = `${config.label} | ${message.text} | Veljavnost: ${(ttlMs / 1000).toFixed(1)} s`
   if (hint) hint.textContent = 'Skeniraj QR in na telefonu prejmi zabavno sporocilo.'
   if (countEl) countEl.textContent = ''
   if (asciiEl) asciiEl.textContent = ''
@@ -573,7 +584,7 @@ async function generateSoloToken(runId) {
     const hintEl = document.querySelector('#hint')
     if (hintEl) hintEl.textContent = 'Menjava! Nova QR runda...'
     startSoloRound()
-  }, config.ttlMs + 50)
+  }, ttlMs + 50)
 }
 
 async function renderDuelKiosk() {
@@ -966,6 +977,7 @@ function renderJoin(params) {
 function render() {
   const { path, params } = parseRoute()
   if (path !== '/solo-kiosk') {
+    app.classList.remove('kiosk-app')
     clearSoloTimers()
     soloGameState.active = false
     currentSoloRound = null
