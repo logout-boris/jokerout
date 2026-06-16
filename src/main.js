@@ -45,7 +45,7 @@ let duelRunNonce = 0
 let currentDuel = null
 let soloRunNonce = 0
 let currentSoloRound = null
-let soloVisualState = { size: 260, hue: 0 }
+let soloVisualState = { size: 190, hue: 0 }
 let soloMoveTimer = null
 let soloRoundExpiryTimer = null
 let soloNextRoundTimer = null
@@ -162,7 +162,7 @@ function startSoloGame() {
   clearSoloTimers()
   soloRunNonce += 1
   currentSoloRound = null
-  soloVisualState = { size: 260, hue: 0 }
+  soloVisualState = { size: 190, hue: 0 }
   soloGameState = {
     active: true,
     durationMs: 30000,
@@ -858,7 +858,7 @@ function renderClaim(params) {
     if (payload.type === 'solo-round') {
       vibe = GOOD_VIBES[Math.floor(Math.random() * GOOD_VIBES.length)]
       soloVisualState = {
-        size: Math.max(110, soloVisualState.size - 24),
+        size: Math.max(95, soloVisualState.size - 16),
         hue: (soloVisualState.hue + 75) % 360,
       }
       triggerSoloBurst()
