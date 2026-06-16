@@ -362,7 +362,7 @@ async function renderSoloKiosk() {
         <pre id="ascii-dwarf" class="ascii-dwarf"></pre>
         <div id="solo-stage" class="solo-stage">
           <div id="solo-burst" class="solo-burst"></div>
-          <div id="solo-qr-node" class="monster-frame">
+          <div id="solo-qr-node" class="monster-frame hidden">
             <img id="solo-qr" alt="Solo round QR" />
           </div>
         </div>
@@ -459,8 +459,10 @@ async function startSoloRound() {
   const countEl = document.querySelector('#countdown')
   const asciiEl = document.querySelector('#ascii-dwarf')
   const qr = document.querySelector('#solo-qr')
+  const qrNode = document.querySelector('#solo-qr-node')
   const hint = document.querySelector('#hint')
   if (qr) qr.removeAttribute('src')
+  if (qrNode) qrNode.classList.add('hidden')
   stopSoloMovement()
   if (hint) hint.textContent = 'Pripravi telefon...'
   for (let left = 3; left >= 1; left -= 1) {
@@ -509,11 +511,13 @@ async function generateSoloToken(runId) {
   })
 
   const qr = document.querySelector('#solo-qr')
+  const qrNode = document.querySelector('#solo-qr-node')
   const meta = document.querySelector('#meta')
   const countEl = document.querySelector('#countdown')
   const asciiEl = document.querySelector('#ascii-dwarf')
   const hint = document.querySelector('#hint')
   if (qr) qr.src = qrDataUrl
+  if (qrNode) qrNode.classList.remove('hidden')
   if (meta) meta.textContent = `${config.label} | ${message.text} | Veljavnost: ${Math.round(config.ttlMs / 1000)} s`
   if (hint) hint.textContent = 'Skeniraj QR in na telefonu prejmi zabavno sporocilo.'
   if (countEl) countEl.textContent = ''
