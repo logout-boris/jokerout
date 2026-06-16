@@ -23,6 +23,14 @@ body {
   padding: 16px;
 }
 
+.kiosk-page {
+  min-height: calc(100vh - 32px);
+}
+
+.row-actions {
+  margin-top: 0;
+}
+
 .page {
   display: grid;
   gap: 16px;

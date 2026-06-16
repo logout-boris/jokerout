@@ -112,6 +112,21 @@ function setQrBaseUrl(raw) {
   return true
 }
 
+function isFullscreenActive() {
+  return Boolean(document.fullscreenElement)
+}
+
+async function toggleFullscreen() {
+  if (isFullscreenActive()) {
+    await document.exitFullscreen()
+    return
+  }
+  const root = document.documentElement
+  if (root.requestFullscreen) {
+    await root.requestFullscreen()
+  }
+}
+
 function clearSoloTimers() {
   stopSoloMovement()
   if (soloRoundExpiryTimer) {
@@ -330,11 +345,14 @@ function renderHome() {
 async function renderSoloKiosk() {
   const baseUrl = getQrBaseUrl()
   app.innerHTML = `
-    <main class="page">
+    <main class="page kiosk-page">
       <section class="card">
         <div class="row-between">
           <h1>Solo kiosk</h1>
-          <button id="go-home" class="btn">Domov</button>
+          <div class="actions row-actions">
+            <button id="toggle-fullscreen" class="btn primary">Fullscreen</button>
+            <button id="go-home" class="btn">Domov</button>
+          </div>
         </div>
         <div class="inline-form">
           <label for="difficulty">Stopnja</label>
@@ -373,6 +391,22 @@ async function renderSoloKiosk() {
   `
 
   document.querySelector('#go-home')?.addEventListener('click', () => navigate('/'))
+  const fullscreenBtn = document.querySelector('#toggle-fullscreen')
+  const syncFullscreenLabel = () => {
+    if (!fullscreenBtn) return
+    fullscreenBtn.textContent = isFullscreenActive() ? 'Izhod fullscreen' : 'Fullscreen'
+  }
+  document.addEventListener('fullscreenchange', syncFullscreenLabel)
+  fullscreenBtn?.addEventListener('click', async () => {
+    try {
+      await toggleFullscreen()
+    } catch {
+      const hint = document.querySelector('#hint')
+      if (hint) hint.textContent = 'Fullscreen ni uspel. Poskusi ponovno.'
+    }
+    syncFullscreenLabel()
+  })
+  syncFullscreenLabel()
   document.querySelector('#start-game')?.addEventListener('click', () => startSoloGame())
   document.querySelector('#start-round')?.addEventListener('click', () => startSoloRound())
   document.querySelector('#save-base-url')?.addEventListener('click', async () => {
