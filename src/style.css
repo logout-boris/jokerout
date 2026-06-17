@@ -163,6 +163,25 @@ input {
   gap: 8px;
 }
 
+.brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logout-logo {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #5eead4;
+  border: 1px solid rgba(94, 234, 212, 0.5);
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(20, 184, 166, 0.12);
+}
+
 .qr-wrap {
   margin-top: 12px;
   border-radius: 12px;

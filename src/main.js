@@ -6,6 +6,7 @@ const app = document.querySelector('#app')
 const SUPABASE_URL = 'https://hezvtqurbxaxmvcrmuuu.supabase.co'
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_QkiVaVk0SKwT4CrF0PF4aA_DjvdGbTi'
 const ADMIN_RESET_PIN = '3030'
+const GLOBAL_CHANNEL_NAME = 'qr-rush-global'
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
 
 const STORAGE = {
@@ -106,13 +107,19 @@ let soloNextRoundTimer = null
 let soloSkinIndex = 0
 let kioskSessionId = ''
 let kioskRealtimeChannel = null
+let globalRealtimeChannel = null
 let audioCtx = null
 let audioUnlockBound = false
+let kioskLeaderboardTimer = null
+let kioskStartDelayTimer = null
 let soloGameState = {
   active: false,
   lives: 3,
   level: 1,
   catches: 0,
+  currentScore: 0,
+  currentPlayerId: '',
+  currentPlayerName: '',
 }
 
 function getSoloRoundTtlMs(mode, roundIndex) {
@@ -232,6 +239,53 @@ async function sendSessionEvent(sessionId, event, payload = {}) {
   }
 }
 
+async function sendGlobalEvent(event, payload = {}) {
+  const channel = supabase.channel(GLOBAL_CHANNEL_NAME)
+  try {
+    await waitForChannelSubscribed(channel)
+    await channel.send({
+      type: 'broadcast',
+      event,
+      payload: {
+        ...payload,
+        sentAt: Date.now(),
+      },
+    })
+  } finally {
+    await supabase.removeChannel(channel)
+  }
+}
+
+function hideKioskLeaderboard() {
+  const section = document.querySelector('#kiosk-leaderboard')
+  if (section) section.classList.add('hidden')
+}
+
+function showKioskLeaderboardTemporarily(durationMs = 3000) {
+  const section = document.querySelector('#kiosk-leaderboard')
+  if (!section) return
+  section.classList.remove('hidden')
+  if (kioskLeaderboardTimer) clearTimeout(kioskLeaderboardTimer)
+  kioskLeaderboardTimer = setTimeout(() => {
+    section.classList.add('hidden')
+  }, durationMs)
+}
+
+async function setupGlobalRealtime() {
+  if (globalRealtimeChannel) return
+  const channel = supabase.channel(GLOBAL_CHANNEL_NAME)
+  channel.on('broadcast', { event: 'leaderboard_update' }, ({ payload }) => {
+    const entry = payload?.entry
+    if (!entry) return
+    pushEventTopEntry(entry)
+    const path = parseRoute().path
+    if (path === '/solo-kiosk') renderKioskEventPanel()
+    if (path === '/player') renderPlayer()
+  })
+  await waitForChannelSubscribed(channel)
+  globalRealtimeChannel = channel
+}
+
 async function setupKioskRealtime(sessionId) {
   await teardownKioskRealtime()
   const channel = supabase.channel(getSessionChannelName(sessionId))
@@ -240,20 +294,23 @@ async function setupKioskRealtime(sessionId) {
     addEventParticipant(payload?.playerId)
     renderKioskEventPanel()
     if (!soloGameState.active) {
-      startSoloGame()
+      const hint = document.querySelector('#hint')
+      if (hint) hint.textContent = 'Lestvica 3s... nato start!'
+      showKioskLeaderboardTemporarily(3000)
+      if (kioskStartDelayTimer) clearTimeout(kioskStartDelayTimer)
+      kioskStartDelayTimer = setTimeout(() => {
+        startSoloGame({
+          playerId: payload?.playerId || '',
+          playerName: payload?.playerName || 'Anon',
+        })
+      }, 3000)
     }
   })
   channel.on('broadcast', { event: 'catch' }, ({ payload }) => {
     if (payload?.sessionId !== kioskSessionId) return
     addEventParticipant(payload?.playerId)
-    if (typeof payload?.points === 'number' && typeof payload?.reactionMs === 'number') {
-      pushEventTopEntry({
-        playerId: payload.playerId || 'unknown',
-        playerName: payload.playerName || 'Anon',
-        points: payload.points,
-        reactionMs: payload.reactionMs,
-        capturedAt: payload.sentAt || Date.now(),
-      })
+    if (soloGameState.active && payload?.playerId && payload.playerId === soloGameState.currentPlayerId && typeof payload?.points === 'number') {
+      soloGameState.currentScore += payload.points
     }
     renderKioskEventPanel()
     if (currentSoloRound?.tokenId !== payload?.tokenId) return
@@ -358,6 +415,14 @@ function clearSoloTimers() {
     clearTimeout(soloNextRoundTimer)
     soloNextRoundTimer = null
   }
+  if (kioskStartDelayTimer) {
+    clearTimeout(kioskStartDelayTimer)
+    kioskStartDelayTimer = null
+  }
+  if (kioskLeaderboardTimer) {
+    clearTimeout(kioskLeaderboardTimer)
+    kioskLeaderboardTimer = null
+  }
 }
 
 function updateSoloHud() {
@@ -388,9 +453,19 @@ function renderSoloGameOver() {
 function finishSoloGame() {
   if (!soloGameState.active) return
   soloGameState.active = false
+  if (soloGameState.currentScore > 0) {
+    pushEventTopEntry({
+      entryId: `${soloGameState.currentPlayerId || 'anon'}-${Date.now()}`,
+      playerId: soloGameState.currentPlayerId || 'unknown',
+      playerName: soloGameState.currentPlayerName || 'Anon',
+      points: soloGameState.currentScore,
+      capturedAt: Date.now(),
+    })
+  }
   currentSoloRound = null
   clearSoloTimers()
   updateSoloHud()
+  renderKioskEventPanel()
   playBeep({ freq: 180, durationMs: 300, volume: 0.07, type: 'sawtooth' })
   const hint = document.querySelector('#hint')
   if (hint) hint.textContent = 'GAME OVER. Za novo igro naj igralec skenira zacetni QR.'
@@ -404,20 +479,25 @@ function finishSoloGame() {
     gameOver.classList.remove('hidden')
     gameOver.classList.add('show')
   }
+  showKioskLeaderboardTemporarily(3000)
   renderSoloGameOver()
 }
 
-function startSoloGame() {
+function startSoloGame(player = null) {
   clearSoloTimers()
   soloRunNonce += 1
   currentSoloRound = null
   soloVisualState = { size: 190, hue: 0 }
+  hideKioskLeaderboard()
   incrementEventGamesPlayed()
   soloGameState = {
     active: true,
     lives: 3,
     level: 1,
     catches: 0,
+    currentScore: 0,
+    currentPlayerId: player?.playerId || '',
+    currentPlayerName: player?.playerName || 'Anon',
   }
   const result = document.querySelector('#solo-result')
   if (result) {
@@ -529,6 +609,7 @@ function getEventTop20() {
 
 function pushEventTopEntry(entry) {
   const rows = getEventTop20()
+  if (entry?.entryId && rows.some((row) => row.entryId === entry.entryId)) return
   rows.push(entry)
   rows.sort((a, b) => b.points - a.points || (b.capturedAt || 0) - (a.capturedAt || 0))
   saveJSON(STORAGE.eventTop20, rows.slice(0, 20))
@@ -667,7 +748,10 @@ async function renderSoloKiosk() {
     <main class="page kiosk-page">
       <section class="card">
         <div class="row-between">
-          <h1>QR Rush</h1>
+          <div class="brand-lockup">
+            <span class="logout-logo">logout.org</span>
+            <h1>QR Rush</h1>
+          </div>
           <div class="actions row-actions">
             <button id="toggle-fullscreen" class="btn primary">Fullscreen</button>
           </div>
@@ -724,9 +808,9 @@ async function renderSoloKiosk() {
             <img id="solo-qr" alt="Solo round QR" />
           </div>
         </div>
-        <section class="card-sub">
+        <section id="kiosk-leaderboard" class="card-sub hidden">
           <h3>Top 20</h3>
-          <ol id="event-top20" class="board"></ol>
+          <ol id="event-top20" class="board event-board"></ol>
         </section>
         <p id="prevention-message" class="prevention-message"></p>
         <p class="small" id="hint"></p>
@@ -800,8 +884,14 @@ async function renderSoloKiosk() {
     const hint = document.querySelector('#hint')
     if (hint) hint.textContent = 'Realtime povezava ni uspela. Preveri Supabase nastavitve.'
   }
+  try {
+    await setupGlobalRealtime()
+  } catch {
+    // Keep kiosk usable even if global channel is unavailable.
+  }
   updateSoloHud()
   renderKioskEventPanel()
+  showKioskLeaderboardTemporarily(3000)
 }
 
 async function renderStarterQr() {
@@ -1243,6 +1333,7 @@ async function generateRoundTokens(runId) {
 function renderPlayer() {
   const profile = getPlayerProfile()
   const rows = getLeaderboardRows()
+  const globalRows = getEventTop20()
   const myRows = rows
     .filter((row) => row.playerId === profile.id)
     .sort((a, b) => b.points - a.points || a.reactionMs - b.reactionMs)
@@ -1275,6 +1366,17 @@ function renderPlayer() {
           <ol class="board">
             ${myRows
               .map((row) => `<li><span>${row.name} (${row.slot || '-'})</span><strong>${row.points} pts</strong><em>${formatReactionTime(row.reactionMs)}</em></li>`)
+              .join('')}
+          </ol>
+        `}
+      </section>
+
+      <section class="card">
+        <h2>Skupna lestvica (Top 20)</h2>
+        ${globalRows.length === 0 ? '<p class="muted">Se ni rezultatov.</p>' : `
+          <ol class="board event-board">
+            ${globalRows
+              .map((row) => `<li><span>${row.playerName || 'Anon'}</span><strong>${row.points} pts</strong></li>`)
               .join('')}
           </ol>
         `}
@@ -1360,6 +1462,17 @@ function renderClaim(params) {
         // Keep claim UX resilient even if realtime send fails.
       })
     }
+    sendGlobalEvent('leaderboard_update', {
+      entry: {
+        entryId: `${profile.id}-${payload.tokenId}`,
+        playerId: profile.id,
+        playerName: profile.name || 'Anon',
+        points,
+        capturedAt: now,
+      },
+    }).catch(() => {
+      // Global board update is best-effort.
+    })
   }
 
   app.innerHTML = `
@@ -1496,6 +1609,9 @@ function render() {
     return
   }
   if (path === '/player') {
+    setupGlobalRealtime().catch(() => {
+      // Player view still works with cached data if realtime isn't available.
+    })
     renderPlayer()
     return
   }
