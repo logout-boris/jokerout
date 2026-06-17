@@ -15,6 +15,7 @@ const STORAGE = {
   qrBaseUrl: 'joqr.kiosk.qrBaseUrl',
   eventStats: 'joqr.kiosk.eventStats',
   eventTop20: 'joqr.kiosk.eventTop20',
+  messageTheme: 'joqr.kiosk.messageTheme',
 }
 
 const DIFFICULTIES = {
@@ -32,23 +33,61 @@ const MESSAGES = [
   { text: 'Flash pick', base: 60 },
 ]
 
-const GOOD_VIBES = [
-  'Ujet v trenutek.',
-  'Ne snemam. Dozivljam.',
-  'Ta komad ostane v glavi, ne v storiju.',
-  'Danes sem tukaj.',
-  'IRL Fan Club.',
-  'Koncertni nacin aktiviran.',
-  'Notifications Off. Music On.',
-]
-
-const PREVENTION_MESSAGES = [
-  'Odklopi obvestila. Priklopi se na koncert.',
-  'Posnemi manj, dozivi vec.',
-  'Telefon lahko pocaka - trenutek ne.',
-  'Poglej na oder, ne na zaslon.',
-  'Naj bo spomin v glavi, ne v feedu.',
-]
+const MESSAGE_THEMES = {
+  concert: {
+    label: 'Koncert',
+    vibes: [
+      'Ujet v trenutek.',
+      'Ne snemam. Dozivljam.',
+      'Ta komad ostane v glavi, ne v storiju.',
+      'Danes sem tukaj.',
+      'IRL Fan Club.',
+      'Koncertni nacin aktiviran.',
+      'Notifications Off. Music On.',
+    ],
+    prevention: [
+      'Odklopi obvestila. Priklopi se na koncert.',
+      'Posnemi manj, dozivi vec.',
+      'Telefon lahko pocaka - trenutek ne.',
+      'Poglej na oder, ne na zaslon.',
+      'Naj bo spomin v glavi, ne v feedu.',
+    ],
+  },
+  anti_scroll: {
+    label: 'Anti-scroll',
+    vibes: [
+      'Thumb stop. Heart start.',
+      'Manj feeda, vec feelinga.',
+      'Odlogiraj se iz drame in vklopi koncert.',
+      'Dihaj. Poslusaj. Bodi prisoten.',
+      'Ne swipe-aj trenutka stran.',
+    ],
+    prevention: [
+      'Ce ni nujno, ni za zdaj.',
+      'Samo en komad brez ekrana.',
+      'Pozornost je valuta - porabi jo pametno.',
+      'Ne lovi notifov. Ujemi refren.',
+      'Offline trenutki imajo vecjo locljivost.',
+    ],
+  },
+  connection: {
+    label: 'Povezovanje',
+    vibes: [
+      'Poglej prijatelja, ne storija.',
+      'Skupaj v ritmu, ne vsak v svojem feedu.',
+      'Deli trenutek v zivo.',
+      'Nasmeh > screenshot.',
+      'Druzenje je najboljsi filter.',
+    ],
+    prevention: [
+      'Vzpostavi stik, ne samo signala.',
+      'En pogovor vec, en scroll manj.',
+      'Ekran dol, energija gor.',
+      'Najprej odnos, potem objava.',
+      'Bodi z ljudmi, ne z algoritmom.',
+    ],
+  },
+}
 
 const DWARVES = [
   '  /\\_/\\\n ( o.o )\n /|_|_\\\n  / \\',
@@ -276,6 +315,22 @@ function setQrBaseUrl(raw) {
   if (!normalized) return false
   saveJSON(STORAGE.qrBaseUrl, normalized)
   return true
+}
+
+function getActiveThemeKey() {
+  const saved = readJSON(STORAGE.messageTheme, 'concert')
+  return MESSAGE_THEMES[saved] ? saved : 'concert'
+}
+
+function setActiveThemeKey(themeKey) {
+  if (!MESSAGE_THEMES[themeKey]) return false
+  saveJSON(STORAGE.messageTheme, themeKey)
+  return true
+}
+
+function randomThemeMessage(list, fallback = '') {
+  if (!Array.isArray(list) || list.length === 0) return fallback
+  return list[Math.floor(Math.random() * list.length)]
 }
 
 function isFullscreenActive() {
@@ -604,6 +659,10 @@ async function renderSoloKiosk() {
   app.classList.add('kiosk-app')
   kioskSessionId = createKioskSessionId()
   const baseUrl = getQrBaseUrl()
+  const activeThemeKey = getActiveThemeKey()
+  const themeOptions = Object.entries(MESSAGE_THEMES)
+    .map(([key, theme]) => `<option value="${key}" ${key === activeThemeKey ? 'selected' : ''}>${theme.label}</option>`)
+    .join('')
   app.innerHTML = `
     <main class="page kiosk-page">
       <section class="card">
@@ -639,6 +698,10 @@ async function renderSoloKiosk() {
         </section>
         <details class="card-sub settings-toggle">
           <summary>Nastavitve kioska</summary>
+          <div class="inline-form">
+            <label for="message-theme">Tematski paket</label>
+            <select id="message-theme">${themeOptions}</select>
+          </div>
           <div class="inline-form">
             <label for="qr-base-url">QR Base URL</label>
             <input id="qr-base-url" value="${baseUrl}" placeholder="http://192.168.x.x:5173" />
@@ -693,6 +756,18 @@ async function renderSoloKiosk() {
     window.addEventListener('pointerdown', unlockAudio)
     audioUnlockBound = true
   }
+  document.querySelector('#message-theme')?.addEventListener('change', (event) => {
+    const target = event.target
+    if (!setActiveThemeKey(target.value)) return
+    const prevention = document.querySelector('#prevention-message')
+    if (prevention) {
+      const theme = MESSAGE_THEMES[getActiveThemeKey()]
+      prevention.textContent = randomThemeMessage(theme.prevention, 'Odklopi se in uzivaj koncert.')
+      prevention.classList.remove('show')
+      void prevention.offsetWidth
+      prevention.classList.add('show')
+    }
+  })
   document.querySelector('#save-base-url')?.addEventListener('click', async () => {
     await unlockAudio()
     const input = document.querySelector('#qr-base-url')
@@ -926,7 +1001,8 @@ function confirmSoloCatch() {
   if (hint) hint.textContent = 'Bravo, nova runda!'
   const prevention = document.querySelector('#prevention-message')
   if (prevention) {
-    const msg = PREVENTION_MESSAGES[Math.floor(Math.random() * PREVENTION_MESSAGES.length)]
+    const theme = MESSAGE_THEMES[getActiveThemeKey()]
+    const msg = randomThemeMessage(theme.prevention, 'Odklopi obvestila in uzivaj koncert.')
     prevention.textContent = msg
     prevention.classList.remove('show')
     void prevention.offsetWidth
@@ -1265,7 +1341,8 @@ function renderClaim(params) {
     title = 'Ulov uspesen'
     status = `${points} tock | ${formatReactionTime(reactionMs)} | ${payload.type === 'solo-round' ? 'Solo challenge' : `Slot ${payload.slot || '-'}`}`
     if (payload.type === 'solo-round') {
-      vibe = GOOD_VIBES[Math.floor(Math.random() * GOOD_VIBES.length)]
+      const theme = MESSAGE_THEMES[getActiveThemeKey()]
+      vibe = randomThemeMessage(theme.vibes, 'Ujet v trenutek.')
       soloVisualState = {
         size: Math.max(95, soloVisualState.size - 16),
         hue: (soloVisualState.hue + 75) % 360,
