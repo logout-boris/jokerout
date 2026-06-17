@@ -257,7 +257,7 @@ function finishSoloGame() {
   clearSoloTimers()
   updateSoloHud()
   const hint = document.querySelector('#hint')
-  if (hint) hint.textContent = 'GAME OVER. Klikni "Start game" za novo igro.'
+  if (hint) hint.textContent = 'GAME OVER. Za novo igro naj igralec skenira zacetni QR.'
   renderSoloGameOver()
 }
 
@@ -454,8 +454,6 @@ async function renderSoloKiosk() {
             <option value="hard">Hard</option>
             <option value="insane">Insane</option>
           </select>
-          <button id="start-game" class="btn primary">Start game</button>
-          <button id="start-round" class="btn">Nova runda</button>
         </div>
         <div class="hud">
           <p>Zivljenja: <strong id="solo-lives">3</strong></p>
@@ -506,8 +504,6 @@ async function renderSoloKiosk() {
     syncFullscreenLabel()
   })
   syncFullscreenLabel()
-  document.querySelector('#start-game')?.addEventListener('click', () => startSoloGame())
-  document.querySelector('#start-round')?.addEventListener('click', () => startSoloRound())
   document.querySelector('#save-base-url')?.addEventListener('click', async () => {
     const input = document.querySelector('#qr-base-url')
     const ok = setQrBaseUrl(input?.value || '')
