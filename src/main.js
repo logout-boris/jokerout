@@ -53,6 +53,12 @@ const DIGITAL_RECIPES = [
   'Recept: ko zacutis impulz za scroll, naredi 10 globokih vdihov in poglej okoli sebe.',
   'Recept: imej en obrok na dan brez ekrana - samo okus, ljudje in trenutek.',
 ]
+const SCIENCE_INSIGHTS = [
+  'Raziskave kazejo, da pogoste digitalne prekinitve zmanjsujejo globino osredotocenja.',
+  'Mladi v povprecju tezje drzijo daljso pozornost, ko je okolje polno hitrih digitalnih drazlajev.',
+  'Kratki odmiki brez zaslona dokazano pomagajo obnoviti fokus in mentalno energijo.',
+  'Manj preklapljanja med vsebinami praviloma izboljsa delovni spomin in kakovost pozornosti.',
+]
 
 const MESSAGE_THEMES = {
   concert: {
@@ -154,6 +160,9 @@ let soloGameState = {
   currentScore: 0,
   currentPlayerId: '',
   currentPlayerName: '',
+  gameStartedAt: 0,
+  totalReactionMs: 0,
+  reactionsCount: 0,
 }
 
 function getSoloLevelConfig(level = 1) {
@@ -336,6 +345,10 @@ async function setupKioskRealtime(sessionId) {
     addEventParticipant(payload?.playerId)
     if (soloGameState.active && payload?.playerId && payload.playerId === soloGameState.currentPlayerId && typeof payload?.points === 'number') {
       soloGameState.currentScore += payload.points
+      if (typeof payload?.reactionMs === 'number' && payload.reactionMs >= 0) {
+        soloGameState.totalReactionMs += payload.reactionMs
+        soloGameState.reactionsCount += 1
+      }
     }
     renderKioskEventPanel()
     if (currentSoloRound?.tokenId !== payload?.tokenId) return
@@ -385,6 +398,9 @@ async function setupPlayerSessionRealtime(sessionId) {
       motivation: payload?.motivation || 'logout.org: Ujemi trenutek, ne notifikacij.',
       invite: payload?.invite || LOGOUT_STAND_INVITE,
       recipe: payload?.recipe || randomDigitalRecipe(),
+      scienceInsight: payload?.scienceInsight || randomScienceInsight(),
+      avgReactionMs: Number(payload?.avgReactionMs) || 0,
+      totalPlayMs: Number(payload?.totalPlayMs) || 0,
       sessionId: payload?.sessionId || sessionId,
       reason: payload?.reason || 'gameover',
       completedAt: payload?.completedAt || Date.now(),
@@ -501,6 +517,10 @@ function randomDigitalRecipe() {
   return randomThemeMessage(DIGITAL_RECIPES, 'Recept: zavestno odlozi telefon in vrni fokus sebi.')
 }
 
+function randomScienceInsight() {
+  return randomThemeMessage(SCIENCE_INSIGHTS, 'Pozornost je trenabilna - manj motenj, vec fokusa.')
+}
+
 function isFullscreenActive() {
   return Boolean(document.fullscreenElement)
 }
@@ -583,6 +603,11 @@ function finishSoloGame(reason = 'gameover') {
   const catches = soloGameState.catches
   const playerId = soloGameState.currentPlayerId || ''
   const playerName = soloGameState.currentPlayerName || 'Anon'
+  const totalPlayMs = Math.max(0, Date.now() - (soloGameState.gameStartedAt || Date.now()))
+  const avgReactionMs = soloGameState.reactionsCount > 0
+    ? Math.round(soloGameState.totalReactionMs / soloGameState.reactionsCount)
+    : 0
+  const scienceInsight = randomScienceInsight()
   const theme = MESSAGE_THEMES[getActiveThemeKey()]
   const motivationCore = randomThemeMessage(theme.prevention, 'Odklopi obvestila in uzivaj koncert.')
   const recipe = randomDigitalRecipe()
@@ -606,6 +631,9 @@ function finishSoloGame(reason = 'gameover') {
       motivation,
       invite: LOGOUT_STAND_INVITE,
       recipe,
+      scienceInsight,
+      avgReactionMs,
+      totalPlayMs,
       completedAt: Date.now(),
     }).catch(() => {
       // Keep kiosk flow resilient even if game_over signal fails.
@@ -684,6 +712,9 @@ function startSoloGame(player = null) {
     currentScore: 0,
     currentPlayerId: player?.playerId || '',
     currentPlayerName: player?.playerName || 'Anon',
+    gameStartedAt: Date.now(),
+    totalReactionMs: 0,
+    reactionsCount: 0,
   }
   const result = document.querySelector('#solo-result')
   if (result) {
@@ -880,7 +911,14 @@ function wrapCanvasText(ctx, text, maxWidth) {
   return lines
 }
 
-function createPostGameShareImage({ playerName = 'Anon', catches = 0, motivation = '', recipe = '' } = {}) {
+function createPostGameShareImage({
+  playerName = 'Anon',
+  catches = 0,
+  motivation = '',
+  recipe = '',
+  avgReactionMs = 0,
+  totalPlayMs = 0,
+} = {}) {
   const canvas = document.createElement('canvas')
   const width = 1080
   const height = 1350
@@ -936,6 +974,9 @@ function createPostGameShareImage({ playerName = 'Anon', catches = 0, motivation
 
   ctx.fillStyle = '#93c5fd'
   ctx.font = '600 30px Inter, sans-serif'
+  ctx.fillText(`Povprecni odziv: ${avgReactionMs > 0 ? formatReactionTime(avgReactionMs) : 'n/a'}`, 78, 1146)
+  ctx.fillText(`Skupni cas igre: ${totalPlayMs > 0 ? formatReactionTime(totalPlayMs) : '00:00:00'}`, 78, 1190)
+
   ctx.fillText(LOGOUT_STAND_INVITE, 78, height - 150)
   ctx.fillText('Ujemi trenutek. Ne notifikacij.', 78, height - 104)
 
@@ -1737,8 +1778,11 @@ function renderPlayer() {
   const postGame = getLastGameOverSummary()
   const canSharePostGame = postGame?.playerId === profile.id
   const postGameRecipe = canSharePostGame ? (postGame.recipe || randomDigitalRecipe()) : ''
+  const postGameInsight = canSharePostGame ? (postGame.scienceInsight || randomScienceInsight()) : ''
+  const postGameAvgReaction = canSharePostGame ? Math.max(0, Number(postGame.avgReactionMs) || 0) : 0
+  const postGameTotalPlay = canSharePostGame ? Math.max(0, Number(postGame.totalPlayMs) || 0) : 0
   const postGameShareText = canSharePostGame
-    ? `Ujel sem ${postGame.catches} skratov, ki nam jemljejo pozornost. ${postGameRecipe} ${postGame.motivation} ${postGame.invite || LOGOUT_STAND_INVITE}`
+    ? `Ujel sem ${postGame.catches} skratov, ki nam jemljejo pozornost. Povprecni odziv: ${postGameAvgReaction > 0 ? formatReactionTime(postGameAvgReaction) : 'n/a'}. Skupni cas igre: ${formatReactionTime(postGameTotalPlay)}. ${postGameRecipe} ${postGame.motivation} ${postGame.invite || LOGOUT_STAND_INVITE}`
     : ''
   const postGameShareUrl = `${window.location.origin}${window.location.pathname}#/player`
   const postGameShareImage = canSharePostGame
@@ -1747,6 +1791,8 @@ function renderPlayer() {
       catches: postGame.catches,
       motivation: postGame.motivation,
       recipe: postGameRecipe,
+      avgReactionMs: postGameAvgReaction,
+      totalPlayMs: postGameTotalPlay,
     })
     : ''
   const myRows = rows
@@ -1782,6 +1828,11 @@ function renderPlayer() {
         <section class="card postgame-share-card">
           <h2>Game over povzetek</h2>
           <p>Ujel si <strong>${postGame.catches}</strong> skratov, ki jemljejo pozornost.</p>
+          <div class="focus-metrics">
+            <p><strong>Povprecni odziv:</strong> ${postGameAvgReaction > 0 ? formatReactionTime(postGameAvgReaction) : 'n/a'}</p>
+            <p><strong>Skupni cas igre:</strong> ${formatReactionTime(postGameTotalPlay)}</p>
+          </div>
+          <p class="science-line"><strong>Znanstveni vpogled:</strong> ${postGameInsight}</p>
           <p class="recipe-line"><strong>Recept za fokus:</strong> ${postGameRecipe}</p>
           <p class="vibe">${postGame.motivation}</p>
           <p class="small invite-line">${postGame.invite || LOGOUT_STAND_INVITE}</p>
