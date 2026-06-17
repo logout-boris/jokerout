@@ -25,6 +25,14 @@ const DIFFICULTIES = {
   hard: { label: 'Hard', ttlMs: 3500, minMs: 800, maxMs: 2400 },
   insane: { label: 'Insane', ttlMs: 2200, minMs: 500, maxMs: 1400 },
 }
+const SOLO_LEVEL_CONFIGS = [
+  { mode: 'easy', label: 'Level 1', ttlMs: 15000, qrSize: 210, speedMultiplier: 1.0 },
+  { mode: 'normal', label: 'Level 2', ttlMs: 12000, qrSize: 185, speedMultiplier: 1.2 },
+  { mode: 'hard', label: 'Level 3', ttlMs: 9500, qrSize: 160, speedMultiplier: 1.45 },
+  { mode: 'insane', label: 'Level 4', ttlMs: 7500, qrSize: 138, speedMultiplier: 1.75 },
+  { mode: 'insane', label: 'Level 5', ttlMs: 5800, qrSize: 118, speedMultiplier: 2.1 },
+]
+const SOLO_MAX_LEVELS = SOLO_LEVEL_CONFIGS.length
 
 const MESSAGES = [
   { text: 'Mega ulov', base: 50 },
@@ -104,6 +112,7 @@ let soloVisualState = { size: 190, hue: 0 }
 let soloMoveTimer = null
 let soloRoundExpiryTimer = null
 let soloNextRoundTimer = null
+let soloGameOverRevealTimer = null
 let soloSkinIndex = 0
 let kioskSessionId = ''
 let kioskRealtimeChannel = null
@@ -122,23 +131,14 @@ let soloGameState = {
   currentPlayerName: '',
 }
 
-function getSoloRoundTtlMs(mode, roundIndex) {
-  const config = DIFFICULTIES[mode] || DIFFICULTIES.normal
-  const firstRoundMs = 15000
-  const stepDownMs = 1200
-  return Math.max(config.ttlMs, firstRoundMs - roundIndex * stepDownMs)
+function getSoloLevelConfig(level = 1) {
+  const index = Math.max(0, Math.min(SOLO_LEVEL_CONFIGS.length - 1, Number(level || 1) - 1))
+  return SOLO_LEVEL_CONFIGS[index] || SOLO_LEVEL_CONFIGS[0]
 }
 
-function getSoloMovementMultiplier(level, mode = 'normal') {
-  const safeLevel = Math.max(1, Number(level) || 1)
-  const curves = {
-    easy: { step: 0.045, max: 1.42 },
-    normal: { step: 0.065, max: 1.62 },
-    hard: { step: 0.085, max: 1.82 },
-    insane: { step: 0.1, max: 2.0 },
-  }
-  const curve = curves[mode] || curves.normal
-  return Math.min(curve.max, 1 + (safeLevel - 1) * curve.step)
+function getSoloMovementMultiplier(level = 1) {
+  const levelCfg = getSoloLevelConfig(level)
+  return levelCfg.speedMultiplier || 1
 }
 
 function isPhonePlayerDevice() {
@@ -415,6 +415,10 @@ function clearSoloTimers() {
     clearTimeout(soloNextRoundTimer)
     soloNextRoundTimer = null
   }
+  if (soloGameOverRevealTimer) {
+    clearTimeout(soloGameOverRevealTimer)
+    soloGameOverRevealTimer = null
+  }
   if (kioskStartDelayTimer) {
     clearTimeout(kioskStartDelayTimer)
     kioskStartDelayTimer = null
@@ -441,17 +445,19 @@ function updateSoloHud() {
 
 function renderSoloGameOver() {
   const panel = document.querySelector('#solo-result')
-  if (!panel) return
-  panel.classList.remove('hidden')
-  panel.innerHTML = `
-    <h3>Game over</h3>
-    <p>Uspesni ulovi: <strong>${soloGameState.catches}</strong></p>
-    <p>Dosezen level: <strong>${Math.max(1, soloGameState.level - 1)}</strong></p>
-  `
+  if (panel) {
+    panel.classList.add('hidden')
+    panel.innerHTML = ''
+  }
+  const hint = document.querySelector('#hint')
+  if (hint) {
+    hint.textContent = `Konec igre. Ulovi: ${soloGameState.catches} | Level: ${Math.max(1, soloGameState.level - 1)}`
+  }
 }
 
-function finishSoloGame() {
+function finishSoloGame(reason = 'gameover') {
   if (!soloGameState.active) return
+  const completedAllLevels = reason === 'completed'
   soloGameState.active = false
   if (soloGameState.currentScore > 0) {
     pushEventTopEntry({
@@ -466,28 +472,57 @@ function finishSoloGame() {
   clearSoloTimers()
   updateSoloHud()
   renderKioskEventPanel()
-  playBeep({ freq: 180, durationMs: 300, volume: 0.07, type: 'sawtooth' })
+  playBeep(completedAllLevels
+    ? { freq: 740, durationMs: 260, volume: 0.075, type: 'triangle' }
+    : { freq: 180, durationMs: 300, volume: 0.07, type: 'sawtooth' })
   const hint = document.querySelector('#hint')
-  if (hint) hint.textContent = 'GAME OVER. Za novo igro naj igralec skenira zacetni QR.'
+  if (hint) hint.textContent = completedAllLevels ? 'KONEC IGRE' : 'GAME OVER'
+  const qr = document.querySelector('#solo-qr')
+  if (qr) qr.removeAttribute('src')
+  const qrNode = document.querySelector('#solo-qr-node')
+  if (qrNode) qrNode.classList.add('hidden')
+  const banner = document.querySelector('#catch-banner')
+  if (banner) banner.classList.add('hidden')
+  const countEl = document.querySelector('#countdown')
+  if (countEl) countEl.textContent = ''
+  const asciiEl = document.querySelector('#ascii-dwarf')
+  if (asciiEl) asciiEl.textContent = ''
   const starter = document.querySelector('#starter-card')
   if (starter) {
-    starter.classList.remove('hidden')
+    starter.classList.add('hidden')
     starter.classList.add('restart-highlight')
   }
+  const result = document.querySelector('#solo-result')
+  if (result) result.classList.add('hidden')
+  hideKioskLeaderboard()
   const gameOver = document.querySelector('#gameover-banner')
   if (gameOver) {
+    gameOver.textContent = completedAllLevels ? 'KONEC IGRE' : 'GAME OVER'
     gameOver.classList.remove('hidden')
     gameOver.classList.add('show')
   }
-  showKioskLeaderboardTemporarily(3000)
-  renderSoloGameOver()
+  if (soloGameOverRevealTimer) clearTimeout(soloGameOverRevealTimer)
+  soloGameOverRevealTimer = setTimeout(() => {
+    const lateGameOver = document.querySelector('#gameover-banner')
+    if (lateGameOver) {
+      lateGameOver.classList.add('hidden')
+      lateGameOver.classList.remove('show')
+    }
+    const lateStarter = document.querySelector('#starter-card')
+    if (lateStarter) lateStarter.classList.remove('hidden')
+    showKioskLeaderboardTemporarily(3000)
+    renderSoloGameOver()
+    const lateHint = document.querySelector('#hint')
+    if (lateHint) lateHint.textContent = 'Za novo igro naj igralec skenira zacetni QR.'
+  }, 1300)
 }
 
 function startSoloGame(player = null) {
   clearSoloTimers()
   soloRunNonce += 1
   currentSoloRound = null
-  soloVisualState = { size: 190, hue: 0 }
+  const levelConfig = getSoloLevelConfig(1)
+  soloVisualState = { size: levelConfig.qrSize, hue: 0 }
   hideKioskLeaderboard()
   incrementEventGamesPlayed()
   soloGameState = {
@@ -757,13 +792,7 @@ async function renderSoloKiosk() {
           </div>
         </div>
         <div class="inline-form control-row">
-          <label for="difficulty">Stopnja</label>
-          <select id="difficulty">
-            <option value="easy">Easy</option>
-            <option value="normal" selected>Normal</option>
-            <option value="hard">Hard</option>
-            <option value="insane">Insane</option>
-          </select>
+          <span>Stopnje so avtomatske: <strong>1 / ${SOLO_MAX_LEVELS}</strong></span>
         </div>
         <div class="hud">
           <p>Zivljenja: <strong id="solo-lives" class="lives-pixels"></strong></p>
@@ -914,13 +943,13 @@ function stopSoloMovement() {
   }
 }
 
-function startSoloMovement(level = 1, mode = 'normal') {
+function startSoloMovement(level = 1) {
   stopSoloMovement()
   const stage = document.querySelector('#kiosk-main-stage') || document.querySelector('#solo-stage')
   const qrNode = document.querySelector('#solo-qr-node')
   if (!stage || !qrNode) return
 
-  const speed = getSoloMovementMultiplier(level, mode)
+  const speed = getSoloMovementMultiplier(level)
   let x = 20
   let y = 20
   let vx = 2.8 * speed
@@ -996,12 +1025,10 @@ async function startSoloRound() {
 
 async function generateSoloToken(runId) {
   if (runId !== soloRunNonce) return
-  const select = document.querySelector('#difficulty')
-  const mode = select?.value || 'normal'
+  const levelConfig = getSoloLevelConfig(soloGameState.level)
+  const mode = levelConfig.mode
   const config = DIFFICULTIES[mode] || DIFFICULTIES.normal
-  const ttlMs = soloGameState.active
-    ? getSoloRoundTtlMs(mode, Math.max(0, soloGameState.level - 1))
-    : config.ttlMs
+  const ttlMs = soloGameState.active ? levelConfig.ttlMs : levelConfig.ttlMs
   const message = MESSAGES[Math.floor(Math.random() * MESSAGES.length)]
   const now = Date.now()
   const tokenId = crypto.randomUUID ? crypto.randomUUID() : `token-${now}`
@@ -1039,12 +1066,12 @@ async function generateSoloToken(runId) {
   const hint = document.querySelector('#hint')
   if (qr) qr.src = qrDataUrl
   if (qrNode) qrNode.classList.remove('hidden')
-  if (meta) meta.textContent = `${config.label} | ${message.text} | Veljavnost: ${(ttlMs / 1000).toFixed(1)} s`
+  if (meta) meta.textContent = `Stopnja ${soloGameState.level}/${SOLO_MAX_LEVELS} (${config.label}) | Hitrost x${levelConfig.speedMultiplier.toFixed(2)} | Veljavnost: ${(ttlMs / 1000).toFixed(1)} s`
   if (hint) hint.textContent = 'Skeniraj QR in na telefonu prejmi zabavno sporocilo.'
   if (countEl) countEl.textContent = ''
   if (asciiEl) asciiEl.textContent = ''
   applySoloQrVisual()
-  startSoloMovement(soloGameState.level, mode)
+  startSoloMovement(soloGameState.level)
   updateSoloHud()
 
   if (soloRoundExpiryTimer) clearTimeout(soloRoundExpiryTimer)
@@ -1054,7 +1081,7 @@ async function generateSoloToken(runId) {
       soloGameState.lives -= 1
       updateSoloHud()
       if (soloGameState.lives <= 0) {
-        finishSoloGame()
+        finishSoloGame('gameover')
         return
       }
     }
@@ -1071,12 +1098,16 @@ function confirmSoloCatch() {
     soloRoundExpiryTimer = null
   }
   soloGameState.catches += 1
-  soloGameState.level += 1
-  soloVisualState = {
-    size: Math.max(95, soloVisualState.size - 16),
-    hue: (soloVisualState.hue + 75) % 360,
+  const completedAllLevels = soloGameState.level >= SOLO_MAX_LEVELS
+  if (!completedAllLevels) {
+    soloGameState.level += 1
+    const nextConfig = getSoloLevelConfig(soloGameState.level)
+    soloVisualState = {
+      size: nextConfig.qrSize,
+      hue: (soloVisualState.hue + 75) % 360,
+    }
+    applySoloQrVisual()
   }
-  applySoloQrVisual()
   triggerSoloBurst()
   playBeep({ freq: 1120, durationMs: 130, volume: 0.07, type: 'square' })
   const banner = document.querySelector('#catch-banner')
@@ -1089,7 +1120,7 @@ function confirmSoloCatch() {
   updateSoloHud()
   currentSoloRound = null
   const hint = document.querySelector('#hint')
-  if (hint) hint.textContent = 'Bravo, nova runda!'
+  if (hint) hint.textContent = completedAllLevels ? 'Bravo! Zakljucil si vse stopnje.' : 'Bravo, nova runda!'
   const prevention = document.querySelector('#prevention-message')
   if (prevention) {
     const theme = MESSAGE_THEMES[getActiveThemeKey()]
@@ -1102,7 +1133,12 @@ function confirmSoloCatch() {
   if (soloNextRoundTimer) clearTimeout(soloNextRoundTimer)
   soloNextRoundTimer = setTimeout(() => {
     if (banner) banner.classList.add('hidden')
-    if (soloGameState.active) startSoloRound()
+    if (!soloGameState.active) return
+    if (completedAllLevels) {
+      finishSoloGame('completed')
+      return
+    }
+    startSoloRound()
   }, 850)
 }
 
