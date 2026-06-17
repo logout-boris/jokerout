@@ -775,12 +775,27 @@ async function renderSoloKiosk() {
           <p>Razlicni udelezenci: <strong id="event-participants" class="stat-participants">0</strong></p>
         </section>
         <p class="muted retro-note" id="meta">Skeniraj zacetni QR za takojsnji start.</p>
-        <section id="starter-card" class="card-sub starter-card">
-          <h3>Zacetni QR (start igre)</h3>
-          <p class="small starter-sub">Prisloni telefon in ulovi ritem.</p>
-          <p class="small session-line">Session: <code id="session-code">${kioskSessionId}</code></p>
-          <div class="qr-wrap mini"><img id="starter-qr" alt="Start game QR" /></div>
-        </section>
+        <div id="kiosk-main-stage" class="solo-stage kiosk-main-stage">
+          <p class="countdown stage-countdown" id="countdown"></p>
+          <pre id="ascii-dwarf" class="ascii-dwarf stage-dwarf"></pre>
+          <section id="starter-card" class="card-sub starter-card stage-panel">
+            <h3>Zacetni QR (start igre)</h3>
+            <p class="small starter-sub">Prisloni telefon in ulovi ritem.</p>
+            <p class="small session-line">Session: <code id="session-code">${kioskSessionId}</code></p>
+            <div class="qr-wrap mini"><img id="starter-qr" alt="Start game QR" /></div>
+          </section>
+          <section id="kiosk-leaderboard" class="card-sub stage-panel stage-leaderboard hidden">
+            <h3>Top 20</h3>
+            <ol id="event-top20" class="board event-board"></ol>
+          </section>
+          <section id="solo-result" class="card-sub stage-panel hidden"></section>
+          <div id="solo-burst" class="solo-burst"></div>
+          <div id="gameover-banner" class="gameover-banner hidden">GAME OVER</div>
+          <div id="catch-banner" class="catch-banner hidden">UJETO!</div>
+          <div id="solo-qr-node" class="monster-frame hidden">
+            <img id="solo-qr" alt="Solo round QR" />
+          </div>
+        </div>
         <details class="card-sub settings-toggle">
           <summary>Nastavitve kioska</summary>
           <div class="inline-form">
@@ -799,23 +814,8 @@ async function renderSoloKiosk() {
           </div>
           <p class="small">Kiosk mora biti odprt na istem URL, ki je nastavljen tukaj.</p>
         </details>
-        <p class="countdown" id="countdown"></p>
-        <pre id="ascii-dwarf" class="ascii-dwarf"></pre>
-        <div id="solo-stage" class="solo-stage">
-          <div id="solo-burst" class="solo-burst"></div>
-          <div id="gameover-banner" class="gameover-banner hidden">GAME OVER</div>
-          <div id="catch-banner" class="catch-banner hidden">UJETO!</div>
-          <div id="solo-qr-node" class="monster-frame hidden">
-            <img id="solo-qr" alt="Solo round QR" />
-          </div>
-        </div>
-        <section id="kiosk-leaderboard" class="card-sub hidden">
-          <h3>Top 20</h3>
-          <ol id="event-top20" class="board event-board"></ol>
-        </section>
         <p id="prevention-message" class="prevention-message"></p>
         <p class="small" id="hint"></p>
-        <section id="solo-result" class="card-sub hidden"></section>
       </section>
     </main>
   `
@@ -916,7 +916,7 @@ function stopSoloMovement() {
 
 function startSoloMovement(level = 1, mode = 'normal') {
   stopSoloMovement()
-  const stage = document.querySelector('#solo-stage')
+  const stage = document.querySelector('#kiosk-main-stage') || document.querySelector('#solo-stage')
   const qrNode = document.querySelector('#solo-qr-node')
   if (!stage || !qrNode) return
 

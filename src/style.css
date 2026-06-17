@@ -32,6 +32,7 @@ body {
 
 .kiosk-page {
   min-height: calc(100vh - 32px);
+  height: calc(100vh - 32px);
   width: 100%;
 }
 
@@ -45,6 +46,11 @@ body {
   margin: 0 auto;
   border-color: rgba(59, 130, 246, 0.25);
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45);
+  display: grid;
+  grid-template-rows: auto auto auto auto auto 1fr auto auto;
+  gap: 8px;
+  height: 100%;
+  overflow: hidden;
 }
 
 .row-actions {
@@ -247,7 +253,7 @@ input {
 }
 
 .event-summary {
-  margin-top: 10px;
+  margin-top: 0;
   display: flex;
   gap: 24px;
   flex-wrap: wrap;
@@ -265,7 +271,7 @@ input {
 
 .retro-note {
   color: #fde68a;
-  margin-top: 10px;
+  margin-top: 0;
   text-align: center;
 }
 
@@ -287,7 +293,7 @@ input {
 }
 
 .settings-toggle {
-  margin-top: 10px;
+  margin-top: 0;
 }
 
 .settings-toggle summary {
@@ -315,7 +321,7 @@ input {
 .starter-card {
   text-align: center;
   max-width: 440px;
-  margin: 10px auto 0;
+  margin: 0 auto;
 }
 
 .starter-card .qr-wrap.mini {
@@ -361,7 +367,7 @@ input {
 }
 
 .solo-stage {
-  margin-top: 10px;
+  margin-top: 0;
   width: 100%;
   min-height: 500px;
   border-radius: 12px;
@@ -369,6 +375,48 @@ input {
   background: rgba(2, 6, 23, 0.75);
   position: relative;
   overflow: hidden;
+}
+
+.kiosk-main-stage {
+  min-height: 0;
+  height: 100%;
+}
+
+.stage-countdown {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  z-index: 6;
+  margin: 0;
+  transform: translateX(-50%);
+}
+
+.stage-dwarf {
+  position: absolute;
+  top: 58px;
+  left: 50%;
+  z-index: 6;
+  margin: 0;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.stage-panel {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 3;
+  transform: translate(-50%, -50%);
+  width: min(92%, 460px);
+}
+
+.stage-leaderboard {
+  top: auto;
+  bottom: 12px;
+  transform: translateX(-50%);
+  width: min(92%, 760px);
+  max-height: 68%;
+  overflow: auto;
 }
 
 .solo-burst {
