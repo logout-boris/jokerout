@@ -273,6 +273,15 @@ function computePoints(payload, reactionMs) {
   return Math.max(1, payload.base + speedBonus)
 }
 
+function formatReactionTime(ms) {
+  const safe = Math.max(0, Math.floor(ms))
+  const totalSeconds = Math.floor(safe / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  const centiseconds = Math.floor((safe % 1000) / 10)
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}:${String(centiseconds).padStart(2, '0')}`
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -858,7 +867,7 @@ function renderPlayer() {
         <h2>Tvoj rekord</h2>
         ${best ? `
           <p class="record-badge">${best.points} pts</p>
-          <p class="small">Najhitrejsi odziv: ${best.reactionMs} ms</p>
+          <p class="small">Najhitrejsi odziv: ${formatReactionTime(best.reactionMs)}</p>
           <p class="small">Izziv: ${best.text || 'Solo challenge'}</p>
         ` : '<p class="muted">Se ni rezultata. Ujemi prvo QR kodo.</p>'}
       </section>
@@ -868,7 +877,7 @@ function renderPlayer() {
         ${myRows.length === 0 ? '<p class="muted">Ni rezultatov.</p>' : `
           <ol class="board">
             ${myRows
-              .map((row) => `<li><span>${row.name} (${row.slot || '-'})</span><strong>${row.points} pts</strong><em>${row.reactionMs} ms</em></li>`)
+              .map((row) => `<li><span>${row.name} (${row.slot || '-'})</span><strong>${row.points} pts</strong><em>${formatReactionTime(row.reactionMs)}</em></li>`)
               .join('')}
           </ol>
         `}
@@ -933,7 +942,7 @@ function renderClaim(params) {
       createdAt: now,
     })
     title = 'Ulov uspesen'
-    status = `${points} tock | ${reactionMs} ms | ${payload.type === 'solo-round' ? 'Solo challenge' : `Slot ${payload.slot || '-'}`}`
+    status = `${points} tock | ${formatReactionTime(reactionMs)} | ${payload.type === 'solo-round' ? 'Solo challenge' : `Slot ${payload.slot || '-'}`}`
     if (payload.type === 'solo-round') {
       vibe = GOOD_VIBES[Math.floor(Math.random() * GOOD_VIBES.length)]
       soloVisualState = {
