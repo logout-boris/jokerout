@@ -401,6 +401,9 @@ async function setupPlayerSessionRealtime(sessionId) {
       scienceInsight: payload?.scienceInsight || randomScienceInsight(),
       avgReactionMs: Number(payload?.avgReactionMs) || 0,
       totalPlayMs: Number(payload?.totalPlayMs) || 0,
+      surveyCompleted: false,
+      raffleCode: '',
+      survey: null,
       sessionId: payload?.sessionId || sessionId,
       reason: payload?.reason || 'gameover',
       completedAt: payload?.completedAt || Date.now(),
@@ -1777,6 +1780,8 @@ function renderPlayer() {
   const globalRows = getEventTop20()
   const postGame = getLastGameOverSummary()
   const canSharePostGame = postGame?.playerId === profile.id
+  const surveyCompleted = canSharePostGame && postGame?.surveyCompleted
+  const raffleCode = canSharePostGame ? (postGame?.raffleCode || '') : ''
   const postGameRecipe = canSharePostGame ? (postGame.recipe || randomDigitalRecipe()) : ''
   const postGameInsight = canSharePostGame ? (postGame.scienceInsight || randomScienceInsight()) : ''
   const postGameAvgReaction = canSharePostGame ? Math.max(0, Number(postGame.avgReactionMs) || 0) : 0
@@ -1844,6 +1849,44 @@ function renderPlayer() {
             <a class="btn" href="https://wa.me/?text=${encodeURIComponent(`${postGameShareText} ${postGameShareUrl}`)}" target="_blank" rel="noopener noreferrer">WhatsApp</a>
             <button id="clear-postgame" class="btn">Skrij</button>
           </div>
+          <section class="focus-survey-wrap">
+            <h3>Kratka anketa za zrebanje Warewolf</h3>
+            ${surveyCompleted ? `
+              <p class="survey-success">Hvala! Izpolnil si pogoj za sodelovanje v zrebanju za namizno igro Warewolf.</p>
+              <p class="survey-code">Tvoja zrebalna koda: <strong>${raffleCode}</strong></p>
+            ` : `
+              <form id="focus-survey" class="focus-survey">
+                <label>Kaj te najpogosteje zmoti?
+                  <select name="biggestDistractor" required>
+                    <option value="">Izberi...</option>
+                    <option value="notifikacije">Notifikacije</option>
+                    <option value="social-scroll">Social scroll</option>
+                    <option value="multitasking">Prevec taskov hkrati</option>
+                    <option value="something-else">Nekaj drugega</option>
+                  </select>
+                </label>
+                <label>Kolikokrat dnevno naredis zavesten odmik brez ekrana?
+                  <select name="focusBreaks" required>
+                    <option value="">Izberi...</option>
+                    <option value="0">0x</option>
+                    <option value="1-2">1-2x</option>
+                    <option value="3-4">3-4x</option>
+                    <option value="5+">5x ali vec</option>
+                  </select>
+                </label>
+                <label>Kateri pristop bi rad najprej preizkusil?
+                  <select name="nextStep" required>
+                    <option value="">Izberi...</option>
+                    <option value="silent-notifs">Utisanje notifikacij</option>
+                    <option value="time-block">Casovni blok brez telefona</option>
+                    <option value="sleep-cutoff">Brez ekrana pred spanjem</option>
+                  </select>
+                </label>
+                <button type="submit" class="btn primary">Oddaj anketo in sodeluj v zrebanju</button>
+                <p id="survey-status" class="small muted"></p>
+              </form>
+            `}
+          </section>
         </section>
       ` : ''}
 
@@ -1920,6 +1963,32 @@ function renderPlayer() {
     } catch {
       // Ignore cancellation/errors from share dialogs.
     }
+  })
+  document.querySelector('#focus-survey')?.addEventListener('submit', (event) => {
+    event.preventDefault()
+    const form = event.currentTarget
+    const statusEl = document.querySelector('#survey-status')
+    const formData = new FormData(form)
+    const biggestDistractor = String(formData.get('biggestDistractor') || '').trim()
+    const focusBreaks = String(formData.get('focusBreaks') || '').trim()
+    const nextStep = String(formData.get('nextStep') || '').trim()
+    if (!biggestDistractor || !focusBreaks || !nextStep || !canSharePostGame) {
+      if (statusEl) statusEl.textContent = 'Prosim, odgovori na vsa vprasanja.'
+      return
+    }
+    const code = generateCode(`${profile.id}:${postGame?.completedAt || Date.now()}:${Date.now()}`, 6)
+    saveLastGameOverSummary({
+      ...postGame,
+      surveyCompleted: true,
+      raffleCode: code,
+      surveyCompletedAt: Date.now(),
+      survey: {
+        biggestDistractor,
+        focusBreaks,
+        nextStep,
+      },
+    })
+    renderPlayer()
   })
 }
 

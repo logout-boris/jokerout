@@ -430,6 +430,45 @@ input {
   background: rgba(15, 23, 42, 0.42);
 }
 
+.focus-survey-wrap {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(148, 163, 184, 0.32);
+}
+
+.focus-survey-wrap h3 {
+  margin: 0 0 10px;
+}
+
+.focus-survey {
+  display: grid;
+  gap: 10px;
+}
+
+.focus-survey label {
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.focus-survey select {
+  width: 100%;
+}
+
+.survey-success {
+  margin: 0;
+  color: #86efac;
+  font-weight: 700;
+}
+
+.survey-code {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(134, 239, 172, 0.4);
+  background: rgba(22, 101, 52, 0.2);
+}
+
 .scan-frame {
   margin-top: 10px;
   border-radius: 12px;
