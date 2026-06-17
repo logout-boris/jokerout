@@ -12,6 +12,8 @@ const STORAGE = {
   leaderboard: 'joqr.local.leaderboard',
   claimed: 'joqr.player.claimedTokens',
   qrBaseUrl: 'joqr.kiosk.qrBaseUrl',
+  eventStats: 'joqr.kiosk.eventStats',
+  eventTop20: 'joqr.kiosk.eventTop20',
 }
 
 const DIFFICULTIES = {
@@ -136,12 +138,25 @@ async function setupKioskRealtime(sessionId) {
   const channel = supabase.channel(getSessionChannelName(sessionId))
   channel.on('broadcast', { event: 'start_game' }, ({ payload }) => {
     if (payload?.sessionId !== kioskSessionId) return
+    addEventParticipant(payload?.playerId)
+    renderKioskEventPanel()
     if (!soloGameState.active) {
       startSoloGame()
     }
   })
   channel.on('broadcast', { event: 'catch' }, ({ payload }) => {
     if (payload?.sessionId !== kioskSessionId) return
+    addEventParticipant(payload?.playerId)
+    if (typeof payload?.points === 'number' && typeof payload?.reactionMs === 'number') {
+      pushEventTopEntry({
+        playerId: payload.playerId || 'unknown',
+        playerName: payload.playerName || 'Anon',
+        points: payload.points,
+        reactionMs: payload.reactionMs,
+        capturedAt: payload.sentAt || Date.now(),
+      })
+    }
+    renderKioskEventPanel()
     if (currentSoloRound?.tokenId !== payload?.tokenId) return
     confirmSoloCatch()
   })
@@ -266,6 +281,7 @@ function startSoloGame() {
   soloRunNonce += 1
   currentSoloRound = null
   soloVisualState = { size: 190, hue: 0 }
+  incrementEventGamesPlayed()
   soloGameState = {
     active: true,
     lives: 3,
@@ -278,6 +294,7 @@ function startSoloGame() {
     result.innerHTML = ''
   }
   updateSoloHud()
+  renderKioskEventPanel()
   startSoloRound()
 }
 
@@ -333,6 +350,66 @@ function addScoreEntry(entry) {
 
 function getLeaderboardRows() {
   return readJSON(STORAGE.leaderboard, [])
+}
+
+function getEventStats() {
+  const raw = readJSON(STORAGE.eventStats, null)
+  if (!raw || typeof raw !== 'object') return { gamesPlayed: 0, participants: [] }
+  const participants = Array.isArray(raw.participants) ? raw.participants.filter(Boolean) : []
+  return {
+    gamesPlayed: Number(raw.gamesPlayed) || 0,
+    participants,
+  }
+}
+
+function saveEventStats(stats) {
+  saveJSON(STORAGE.eventStats, stats)
+}
+
+function addEventParticipant(playerId) {
+  if (!playerId) return
+  const stats = getEventStats()
+  if (!stats.participants.includes(playerId)) {
+    stats.participants.push(playerId)
+    saveEventStats(stats)
+  }
+}
+
+function incrementEventGamesPlayed() {
+  const stats = getEventStats()
+  stats.gamesPlayed += 1
+  saveEventStats(stats)
+}
+
+function getEventTop20() {
+  const rows = readJSON(STORAGE.eventTop20, [])
+  return Array.isArray(rows) ? rows : []
+}
+
+function pushEventTopEntry(entry) {
+  const rows = getEventTop20()
+  rows.push(entry)
+  rows.sort((a, b) => b.points - a.points || a.reactionMs - b.reactionMs)
+  saveJSON(STORAGE.eventTop20, rows.slice(0, 20))
+}
+
+function renderKioskEventPanel() {
+  const gamesEl = document.querySelector('#event-games')
+  const participantsEl = document.querySelector('#event-participants')
+  const topEl = document.querySelector('#event-top20')
+  if (!gamesEl || !participantsEl || !topEl) return
+  const stats = getEventStats()
+  gamesEl.textContent = `${stats.gamesPlayed}`
+  participantsEl.textContent = `${stats.participants.length}`
+
+  const rows = getEventTop20()
+  if (!rows.length) {
+    topEl.innerHTML = '<li><span class="muted">Se ni rezultatov.</span><strong>-</strong><em>-</em></li>'
+    return
+  }
+  topEl.innerHTML = rows
+    .map((row) => `<li><span>${row.playerName || 'Anon'}</span><strong>${row.points} pts</strong><em>${formatReactionTime(row.reactionMs)}</em></li>`)
+    .join('')
 }
 
 function encodePayload(data) {
@@ -443,7 +520,6 @@ async function renderSoloKiosk() {
           <h1>Solo kiosk</h1>
           <div class="actions row-actions">
             <button id="toggle-fullscreen" class="btn primary">Fullscreen</button>
-            <button id="go-home" class="btn">Domov</button>
           </div>
         </div>
         <div class="inline-form">
@@ -460,6 +536,10 @@ async function renderSoloKiosk() {
           <p>Level: <strong id="solo-level">1</strong></p>
           <p>Ulovi: <strong id="solo-catches">0</strong></p>
         </div>
+        <section class="card-sub event-summary">
+          <p>Iger odigranih: <strong id="event-games">0</strong></p>
+          <p>Razlicni udelezenci: <strong id="event-participants">0</strong></p>
+        </section>
         <div class="inline-form">
           <label for="qr-base-url">QR Base URL</label>
           <input id="qr-base-url" value="${baseUrl}" placeholder="http://192.168.x.x:5173" />
@@ -481,13 +561,16 @@ async function renderSoloKiosk() {
             <img id="solo-qr" alt="Solo round QR" />
           </div>
         </div>
+        <section class="card-sub">
+          <h3>Top 20</h3>
+          <ol id="event-top20" class="board"></ol>
+        </section>
         <p class="small" id="hint"></p>
         <section id="solo-result" class="card-sub hidden"></section>
       </section>
     </main>
   `
 
-  document.querySelector('#go-home')?.addEventListener('click', () => navigate('/'))
   const fullscreenBtn = document.querySelector('#toggle-fullscreen')
   const syncFullscreenLabel = () => {
     if (!fullscreenBtn) return
@@ -523,6 +606,7 @@ async function renderSoloKiosk() {
     if (hint) hint.textContent = 'Realtime povezava ni uspela. Preveri Supabase nastavitve.'
   }
   updateSoloHud()
+  renderKioskEventPanel()
 }
 
 async function renderStarterQr() {
@@ -1061,6 +1145,8 @@ function renderClaim(params) {
         tokenId: payload.tokenId,
         playerId: profile.id,
         playerName: profile.name || 'Anon',
+        points,
+        reactionMs,
       }).catch(() => {
         // Keep claim UX resilient even if realtime send fails.
       })
