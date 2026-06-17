@@ -70,7 +70,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
     <main class="page kiosk-page">
       <section class="card">
         <div class="row-between">
-          <h1>Solo kiosk</h1>
+          <h1>QR Rush</h1>
           <div class="actions row-actions">
             <button id="toggle-fullscreen" class="btn primary">Fullscreen</button>
           </div>
