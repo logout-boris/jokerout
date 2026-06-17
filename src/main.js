@@ -104,6 +104,11 @@ const DWARVES = [
   '  .-"""-.\n / 0 0  \\\n |  ^   |\n | \'-\'  |\n /|_|_|\\',
   '   __\n _|==|_\n(/ . . \\)\n \\  -  /\n /|___|\\',
 ]
+const OBSTACLE_DWARVES = [
+  '  /\\_/\\\n ( o.o )\n /|_|_\\',
+  '  .-^-.\n / o o \\\n |  ^  |\n /|___|\\',
+  '  _^_\n (o o)\n /|_|\\',
+]
 
 let duelRunNonce = 0
 let currentDuel = null
@@ -1054,9 +1059,9 @@ function startSoloObstacles(level = 1) {
 
   const dwarfCount = Math.max(1, Math.min(6, level - 1))
   const obstacles = Array.from({ length: dwarfCount }, (_, idx) => {
-    const node = document.createElement('div')
+    const node = document.createElement('pre')
     node.className = 'solo-dwarf-obstacle'
-    node.textContent = idx % 2 === 0 ? 'ᗢ' : '✦ᗢ✦'
+    node.textContent = OBSTACLE_DWARVES[idx % OBSTACLE_DWARVES.length]
     stage.appendChild(node)
     const x = 40 + idx * 46
     const y = 30 + idx * 28
