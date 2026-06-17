@@ -134,6 +134,7 @@ let kioskLeaderboardTimer = null
 let kioskStartDelayTimer = null
 let kioskIdleIntroTimer = null
 let kioskIntroRunning = false
+let kioskIdleIntroCount = 0
 let activePhoneScanner = null
 let playerSessionRealtimeChannel = null
 let activePlayerSessionId = ''
@@ -534,6 +535,7 @@ function clearSoloTimers() {
     kioskIdleIntroTimer = null
   }
   kioskIntroRunning = false
+  kioskIdleIntroCount = 0
 }
 
 function updateSoloHud() {
@@ -1053,9 +1055,10 @@ async function renderSoloKiosk() {
             <img id="solo-qr" alt="Solo round QR" />
           </div>
           <section id="kiosk-intro" class="kiosk-intro stage-panel">
-            <p class="intro-title">QR Rush Intro</p>
+            <p class="intro-title" id="intro-title">QR Rush Intro</p>
             <div class="intro-dwarves">${introDwarvesHtml}</div>
-            <p class="small">Skrati vabijo v igro. Pripravi telefon!</p>
+            <p class="small intro-sub" id="intro-sub">Skrati vabijo v igro. Pripravi telefon!</p>
+            <p class="small intro-cta hidden" id="intro-cta">${LOGOUT_STAND_INVITE}</p>
           </section>
         </div>
         <details class="card-sub settings-toggle">
@@ -1154,12 +1157,13 @@ async function renderSoloKiosk() {
   }
   updateSoloHud()
   renderKioskEventPanel()
+  kioskIdleIntroCount = 0
   await playKioskIntro()
   startKioskIdleIntroLoop()
   showKioskLeaderboardTemporarily(3000)
 }
 
-async function playKioskIntro() {
+async function playKioskIntro({ extended = false } = {}) {
   if (kioskIntroRunning) return
   if (soloGameState.active) return
   const overlay = document.querySelector('#kiosk-intro')
@@ -1167,10 +1171,19 @@ async function playKioskIntro() {
   kioskIntroRunning = true
   const starter = document.querySelector('#starter-card')
   const hint = document.querySelector('#hint')
+  const introTitle = document.querySelector('#intro-title')
+  const introSub = document.querySelector('#intro-sub')
+  const introCta = document.querySelector('#intro-cta')
+  overlay.classList.toggle('is-special', extended)
+  if (introTitle) introTitle.textContent = extended ? 'Vecerni Intro' : 'QR Rush Intro'
+  if (introSub) introSub.textContent = extended
+    ? 'Skrati vabijo vse v igro in na logout.org stojnico!'
+    : 'Skrati vabijo v igro. Pripravi telefon!'
+  if (introCta) introCta.classList.toggle('hidden', !extended)
   overlay.classList.remove('hidden')
   if (starter) starter.classList.add('hidden')
-  if (hint) hint.textContent = 'Skrati prihajajo ...'
-  await sleep(2400)
+  if (hint) hint.textContent = extended ? 'Vecerni intro: pridite do logout.org stojnice!' : 'Skrati prihajajo ...'
+  await sleep(extended ? 4200 : 2400)
   if (parseRoute().path !== '/solo-kiosk') {
     kioskIntroRunning = false
     return
@@ -1187,7 +1200,9 @@ function startKioskIdleIntroLoop() {
     if (parseRoute().path !== '/solo-kiosk') return
     if (soloGameState.active) return
     if (kioskIntroRunning) return
-    playKioskIntro()
+    kioskIdleIntroCount += 1
+    const extended = kioskIdleIntroCount % 3 === 0
+    playKioskIntro({ extended })
   }, 60000)
 }
 

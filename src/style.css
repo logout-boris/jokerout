@@ -485,6 +485,13 @@ input {
   z-index: 7;
 }
 
+.kiosk-intro.is-special {
+  border-color: rgba(250, 204, 21, 0.55);
+  box-shadow:
+    0 0 0 2px rgba(250, 204, 21, 0.22),
+    0 0 34px rgba(250, 204, 21, 0.28);
+}
+
 .intro-title {
   margin: 0 0 8px;
   font-size: clamp(26px, 4vw, 44px);
@@ -494,11 +501,25 @@ input {
   text-transform: uppercase;
 }
 
+.kiosk-intro.is-special .intro-title {
+  color: #fde68a;
+}
+
 .intro-dwarves {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 10px;
   margin: 8px 0 10px;
+}
+
+.intro-sub {
+  margin-top: 6px;
+}
+
+.intro-cta {
+  margin-top: 6px;
+  color: #5eead4;
+  font-weight: 700;
 }
 
 .intro-dwarf-card {
