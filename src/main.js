@@ -33,8 +33,6 @@ const SOLO_LEVEL_CONFIGS = [
   { mode: 'easy', label: 'Level 1', ttlMs: 15000, qrSize: 210, speedMultiplier: 1.0 },
   { mode: 'normal', label: 'Level 2', ttlMs: 12000, qrSize: 185, speedMultiplier: 1.2 },
   { mode: 'hard', label: 'Level 3', ttlMs: 9500, qrSize: 160, speedMultiplier: 1.45 },
-  { mode: 'insane', label: 'Level 4', ttlMs: 7500, qrSize: 138, speedMultiplier: 1.75 },
-  { mode: 'insane', label: 'Level 5', ttlMs: 5800, qrSize: 118, speedMultiplier: 2.1 },
 ]
 const SOLO_MAX_LEVELS = SOLO_LEVEL_CONFIGS.length
 
