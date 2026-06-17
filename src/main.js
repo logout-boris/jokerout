@@ -1187,8 +1187,17 @@ async function renderSoloKiosk() {
   updateSoloHud()
   renderKioskEventPanel()
   kioskIdleIntroCount = 0
+  ensureKioskStarterVisible()
   await playKioskIntro()
+  ensureKioskStarterVisible()
   startKioskIdleIntroLoop()
+}
+
+function ensureKioskStarterVisible() {
+  if (soloGameState.active) return
+  const starter = document.querySelector('#starter-card')
+  if (!starter) return
+  starter.classList.remove('hidden')
 }
 
 async function playKioskIntro({ extended = false } = {}) {
@@ -1231,6 +1240,7 @@ function startKioskIdleIntroLoop() {
   kioskIdleIntroTimer = setInterval(() => {
     if (parseRoute().path !== '/solo-kiosk') return
     if (soloGameState.active) return
+    ensureKioskStarterVisible()
     if (kioskIntroRunning) return
     kioskIdleIntroCount += 1
     const extended = kioskIdleIntroCount % 3 === 0
