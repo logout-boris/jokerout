@@ -537,12 +537,28 @@ input {
   width: min(92%, 460px);
 }
 
+#solo-result.stage-panel {
+  top: 48%;
+  width: min(94%, 560px);
+  max-height: 84%;
+  overflow: auto;
+}
+
 .postgame-thought-qr-wrap {
   margin-inline: auto;
 }
 
 .kiosk-focus-metrics {
   margin-top: 8px;
+}
+
+.thought-fallback-link {
+  margin-top: 8px;
+  text-align: center;
+}
+
+.thought-fallback-link a {
+  color: #93c5fd;
 }
 
 .kiosk-intro {

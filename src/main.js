@@ -564,11 +564,11 @@ function renderSoloGameOver(summary = null) {
     </div>
     <p class="science-line"><strong>Znanstveni vpogled:</strong> ${escapeHtml(summary.scienceInsight || randomScienceInsight())}</p>
     <p class="small">Postani delilec pozornosti: skeniraj QR in dodaj lepo misel.</p>
-    <div class="qr-wrap mini postgame-thought-qr-wrap"><img id="postgame-thought-qr" alt="QR za delilca pozornosti" /></div>
+    ${summary.shareThoughtQr
+      ? `<div class="qr-wrap mini postgame-thought-qr-wrap"><img id="postgame-thought-qr" src="${summary.shareThoughtQr}" alt="QR za delilca pozornosti" /></div>`
+      : `<p class="small thought-fallback-link"><a href="${escapeHtml(summary.shareThoughtUrl || '#')}" target="_blank" rel="noopener noreferrer">Odpri obrazec za deljenje misli</a></p>`}
   `
   panel.classList.remove('hidden')
-  const qrImg = panel.querySelector('#postgame-thought-qr')
-  if (qrImg && summary.shareThoughtQr) qrImg.src = summary.shareThoughtQr
   const hint = document.querySelector('#hint')
   if (hint) {
     hint.textContent = 'Skeniraj poseben QR za lepo misel ali zacetni QR za novo igro.'
@@ -659,31 +659,39 @@ function finishSoloGame(reason = 'gameover') {
     }
     const lateStarter = document.querySelector('#starter-card')
     if (lateStarter) lateStarter.classList.add('hidden')
-    renderSoloGameOver({
+    const postGameSummary = {
       catches,
       avgReactionMs,
       totalPlayMs,
       scienceInsight,
       completedAllLevels,
       shareThoughtQr: '',
-    })
+      shareThoughtUrl,
+    }
     QRCode.toDataURL(shareThoughtUrl, { errorCorrectionLevel: 'M', margin: 1, width: 260 })
       .then((qrData) => {
-        const qrImg = document.querySelector('#postgame-thought-qr')
-        if (qrImg) qrImg.src = qrData
+        renderSoloGameOver({
+          ...postGameSummary,
+          shareThoughtQr: qrData,
+        })
       })
       .catch(() => {
-        // Ignore QR generation errors for the optional thought flow.
+        renderSoloGameOver(postGameSummary)
       })
     const lateHint = document.querySelector('#hint')
     if (lateHint) lateHint.textContent = 'Konec igre ...'
     if (soloPostGameStarterTimer) clearTimeout(soloPostGameStarterTimer)
     soloPostGameStarterTimer = setTimeout(() => {
+      const resultPanel = document.querySelector('#solo-result')
+      if (resultPanel) {
+        resultPanel.classList.add('hidden')
+        resultPanel.innerHTML = ''
+      }
       const restartStarter = document.querySelector('#starter-card')
       if (restartStarter) restartStarter.classList.remove('hidden')
       const restartHint = document.querySelector('#hint')
       if (restartHint) restartHint.textContent = 'Za novo igro naj igralec skenira zacetni QR.'
-    }, 3000)
+    }, 6500)
   }, 1300)
 }
 
