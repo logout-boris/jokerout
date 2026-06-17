@@ -378,6 +378,11 @@ input {
   text-align: center;
 }
 
+.postgame-share-card {
+  border-color: rgba(190, 242, 100, 0.45);
+  background: rgba(30, 41, 59, 0.42);
+}
+
 .scan-frame {
   margin-top: 10px;
   border-radius: 12px;

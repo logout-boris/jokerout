@@ -18,6 +18,8 @@ const STORAGE = {
   eventStats: 'joqr.kiosk.eventStats',
   eventTop20: 'joqr.kiosk.eventTop20',
   messageTheme: 'joqr.kiosk.messageTheme',
+  activeSessionId: 'joqr.player.activeSessionId',
+  lastGameOverSummary: 'joqr.player.lastGameOverSummary',
 }
 
 const DIFFICULTIES = {
@@ -130,6 +132,8 @@ let audioUnlockBound = false
 let kioskLeaderboardTimer = null
 let kioskStartDelayTimer = null
 let activePhoneScanner = null
+let playerSessionRealtimeChannel = null
+let activePlayerSessionId = ''
 let soloGameState = {
   active: false,
   lives: 3,
@@ -329,6 +333,56 @@ async function setupKioskRealtime(sessionId) {
   kioskRealtimeChannel = channel
 }
 
+async function teardownPlayerSessionRealtime() {
+  if (!playerSessionRealtimeChannel) return
+  const current = playerSessionRealtimeChannel
+  playerSessionRealtimeChannel = null
+  activePlayerSessionId = ''
+  try {
+    await supabase.removeChannel(current)
+  } catch {
+    // Ignore teardown failures for player session channels.
+  }
+}
+
+function getLastGameOverSummary() {
+  const data = readJSON(STORAGE.lastGameOverSummary, null)
+  if (!data || typeof data !== 'object') return null
+  return data
+}
+
+function clearLastGameOverSummary() {
+  localStorage.removeItem(STORAGE.lastGameOverSummary)
+}
+
+function saveLastGameOverSummary(summary) {
+  saveJSON(STORAGE.lastGameOverSummary, summary)
+}
+
+async function setupPlayerSessionRealtime(sessionId) {
+  if (!sessionId) return
+  if (activePlayerSessionId === sessionId && playerSessionRealtimeChannel) return
+  await teardownPlayerSessionRealtime()
+  const channel = supabase.channel(getSessionChannelName(sessionId))
+  channel.on('broadcast', { event: 'game_over' }, ({ payload }) => {
+    const profile = getPlayerProfile()
+    if (!payload?.playerId || payload.playerId !== profile.id) return
+    saveLastGameOverSummary({
+      playerId: profile.id,
+      catches: Number(payload?.catches) || 0,
+      motivation: payload?.motivation || 'logout.org: Ujemi trenutek, ne notifikacij.',
+      sessionId: payload?.sessionId || sessionId,
+      reason: payload?.reason || 'gameover',
+      completedAt: payload?.completedAt || Date.now(),
+    })
+    if (parseRoute().path === '/player') renderPlayer()
+  })
+  await waitForChannelSubscribed(channel)
+  playerSessionRealtimeChannel = channel
+  activePlayerSessionId = sessionId
+  saveJSON(STORAGE.activeSessionId, sessionId)
+}
+
 function parseRoute() {
   const hash = window.location.hash || '#/'
   const [pathPart, queryString = ''] = hash.slice(1).split('?')
@@ -502,14 +556,32 @@ function renderSoloGameOver() {
 function finishSoloGame(reason = 'gameover') {
   if (!soloGameState.active) return
   const completedAllLevels = reason === 'completed'
+  const catches = soloGameState.catches
+  const playerId = soloGameState.currentPlayerId || ''
+  const playerName = soloGameState.currentPlayerName || 'Anon'
+  const theme = MESSAGE_THEMES[getActiveThemeKey()]
+  const motivationCore = randomThemeMessage(theme.prevention, 'Odklopi obvestila in uzivaj koncert.')
+  const motivation = `logout.org: Ujel si ${catches} skratov, ki jemljejo pozornost. ${motivationCore}`
   soloGameState.active = false
   if (soloGameState.currentScore > 0) {
     pushEventTopEntry({
-      entryId: `${soloGameState.currentPlayerId || 'anon'}-${Date.now()}`,
-      playerId: soloGameState.currentPlayerId || 'unknown',
-      playerName: soloGameState.currentPlayerName || 'Anon',
+      entryId: `${playerId || 'anon'}-${Date.now()}`,
+      playerId: playerId || 'unknown',
+      playerName,
       points: soloGameState.currentScore,
       capturedAt: Date.now(),
+    })
+  }
+  if (kioskSessionId && playerId) {
+    sendSessionEvent(kioskSessionId, 'game_over', {
+      playerId,
+      playerName,
+      catches,
+      reason,
+      motivation,
+      completedAt: Date.now(),
+    }).catch(() => {
+      // Keep kiosk flow resilient even if game_over signal fails.
     })
   }
   currentSoloRound = null
@@ -1495,6 +1567,12 @@ function renderPlayer() {
   const profile = getPlayerProfile()
   const rows = getLeaderboardRows()
   const globalRows = getEventTop20()
+  const postGame = getLastGameOverSummary()
+  const canSharePostGame = postGame?.playerId === profile.id
+  const postGameShareText = canSharePostGame
+    ? `Ujel sem ${postGame.catches} skratov, ki nam jemljejo pozornost. ${postGame.motivation}`
+    : ''
+  const postGameShareUrl = `${window.location.origin}${window.location.pathname}#/player`
   const myRows = rows
     .filter((row) => row.playerId === profile.id)
     .sort((a, b) => b.points - a.points || a.reactionMs - b.reactionMs)
@@ -1524,6 +1602,19 @@ function renderPlayer() {
         ` : '<p class="muted">Se ni rezultata. Ujemi prvo QR kodo.</p>'}
       </section>
 
+      ${canSharePostGame ? `
+        <section class="card postgame-share-card">
+          <h2>Game over povzetek</h2>
+          <p>Ujel si <strong>${postGame.catches}</strong> skratov, ki jemljejo pozornost.</p>
+          <p class="vibe">${postGame.motivation}</p>
+          <div class="actions">
+            <button id="share-postgame" class="btn primary">Deli z vsemi</button>
+            <a class="btn" href="https://wa.me/?text=${encodeURIComponent(`${postGameShareText} ${postGameShareUrl}`)}" target="_blank" rel="noopener noreferrer">WhatsApp</a>
+            <button id="clear-postgame" class="btn">Skrij</button>
+          </div>
+        </section>
+      ` : ''}
+
       <section class="card">
         <h2>Moji rezultati</h2>
         ${myRows.length === 0 ? '<p class="muted">Ni rezultatov.</p>' : `
@@ -1551,6 +1642,27 @@ function renderPlayer() {
 
   document.querySelector('#go-home')?.addEventListener('click', () => navigate('/'))
   document.querySelector('#open-scan-mode')?.addEventListener('click', () => navigate('/scan'))
+  document.querySelector('#clear-postgame')?.addEventListener('click', () => {
+    clearLastGameOverSummary()
+    renderPlayer()
+  })
+  document.querySelector('#share-postgame')?.addEventListener('click', async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: 'QR Rush x logout.org',
+          text: postGameShareText,
+          url: postGameShareUrl,
+        })
+        return
+      }
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(`${postGameShareText} ${postGameShareUrl}`)
+      }
+    } catch {
+      // Ignore cancellation/errors from share dialogs.
+    }
+  })
 }
 
 function renderClaim(params) {
@@ -1572,6 +1684,11 @@ function renderClaim(params) {
     `
     document.querySelector('#go-home')?.addEventListener('click', () => navigate('/'))
     return
+  }
+  if (payload?.sessionId) {
+    setupPlayerSessionRealtime(payload.sessionId).catch(() => {
+      // Claim still works even if session realtime listener fails.
+    })
   }
 
   const profile = getPlayerProfile()
@@ -1646,11 +1763,6 @@ function renderClaim(params) {
     })
   }
 
-  const shareText = caughtDwarf
-    ? `${profile.name || 'Anon'} je ujel škrata v QR Rush! ${points} tock, reakcija ${reactionLabel}.`
-    : ''
-  const shareUrl = `${window.location.origin}${window.location.pathname}#/player`
-
   app.innerHTML = `
     <main class="page">
       <section class="card">
@@ -1661,10 +1773,6 @@ function renderClaim(params) {
           <section class="caught-dwarf-card">
             <p class="small">Ujel si škrata:</p>
             <pre class="caught-dwarf">${caughtDwarf}</pre>
-            <div class="actions">
-              <button id="share-catch" class="btn primary">Deli na telefonu</button>
-              <a class="btn" href="https://wa.me/?text=${encodeURIComponent(`${shareText} ${shareUrl}`)}" target="_blank" rel="noopener noreferrer">WhatsApp</a>
-            </div>
           </section>
         ` : ''}
         <p class="muted">Sporocilo: ${payload.text || 'n/a'}</p>
@@ -1680,30 +1788,18 @@ function renderClaim(params) {
   document.querySelector('#go-scan')?.addEventListener('click', () => navigate('/scan'))
   document.querySelector('#go-home')?.addEventListener('click', () => navigate('/'))
   document.querySelector('#go-player')?.addEventListener('click', () => navigate('/player'))
-  document.querySelector('#share-catch')?.addEventListener('click', async () => {
-    try {
-      if (navigator.share) {
-        await navigator.share({
-          title: 'QR Rush',
-          text: shareText,
-          url: shareUrl,
-        })
-        return
-      }
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(`${shareText} ${shareUrl}`)
-        const statusEl = document.querySelector('.muted')
-        if (statusEl) statusEl.textContent = 'Share besedilo je kopirano v odlozisce.'
-      }
-    } catch {
-      // Share can fail if user cancels.
-    }
-  })
 }
 
 function renderStart(params) {
   const sessionId = params.get('session')
   const profile = getPlayerProfile()
+  if (sessionId) {
+    saveJSON(STORAGE.activeSessionId, sessionId)
+    clearLastGameOverSummary()
+    setupPlayerSessionRealtime(sessionId).catch(() => {
+      // Start page remains usable without listener.
+    })
+  }
   app.innerHTML = `
     <main class="page">
       <section class="card">
@@ -1849,6 +1945,9 @@ function render() {
   if (path !== '/scan') {
     stopPhoneScanner()
   }
+  if (!['/player', '/start', '/claim', '/scan'].includes(path)) {
+    teardownPlayerSessionRealtime()
+  }
   if (path === '/solo-kiosk') {
     renderSoloKiosk()
     return
@@ -1873,6 +1972,12 @@ function render() {
     setupGlobalRealtime().catch(() => {
       // Player view still works with cached data if realtime isn't available.
     })
+    const savedSessionId = readJSON(STORAGE.activeSessionId, '')
+    if (savedSessionId) {
+      setupPlayerSessionRealtime(savedSessionId).catch(() => {
+        // Player view can still render with local summary if realtime reconnect fails.
+      })
+    }
     renderPlayer()
     return
   }
