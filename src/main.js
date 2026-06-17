@@ -906,7 +906,7 @@ function createPostGameShareImage({ playerName = 'Anon', catches = 0, motivation
 
   ctx.fillStyle = '#f8fafc'
   ctx.font = '800 88px Inter, sans-serif'
-  ctx.fillText('QR Rush', 78, 210)
+  ctx.fillText('Lovilec pozornosti', 78, 210)
 
   const dwarf = DWARVES[Math.abs(Number(catches) || 0) % DWARVES.length]
   ctx.fillStyle = '#d9f99d'
@@ -989,8 +989,8 @@ function renderHome() {
   app.innerHTML = `
     <main class="page">
       <section class="card hero">
-        <p class="tag">JokerOut QR Rush</p>
-        <h1>Solo QR Rush (static hosting)</h1>
+        <p class="tag">JokerOut Lovilec pozornosti</p>
+        <h1>Solo Lovilec pozornosti (static hosting)</h1>
         <p>En igralec skenira gibajoco QR kodo. Po ulovu je koda manjsa in druge barve.</p>
         <div class="actions">
           <button id="go-kiosk" class="btn primary">Odpri solo kiosk</button>
@@ -1037,7 +1037,7 @@ async function renderSoloKiosk() {
         <div class="row-between">
           <div class="brand-lockup kiosk-brand">
             <span class="logout-logo">logout.org</span>
-            <h1>QR Rush</h1>
+            <h1>Lovilec pozornosti</h1>
           </div>
           <div class="actions row-actions">
             <button id="toggle-fullscreen" class="btn primary">Fullscreen</button>
@@ -1077,7 +1077,7 @@ async function renderSoloKiosk() {
             <img id="solo-qr" alt="Solo round QR" />
           </div>
           <section id="kiosk-intro" class="kiosk-intro stage-panel">
-            <p class="intro-title" id="intro-title">QR Rush Intro</p>
+            <p class="intro-title" id="intro-title">Lovilec pozornosti Intro</p>
             <div class="intro-dwarves">${introDwarvesHtml}</div>
             <p class="small intro-sub" id="intro-sub">Skrati vabijo v igro. Pripravi telefon!</p>
             <p class="small intro-cta hidden" id="intro-cta">${LOGOUT_STAND_INVITE}</p>
@@ -1197,7 +1197,7 @@ async function playKioskIntro({ extended = false } = {}) {
   const introSub = document.querySelector('#intro-sub')
   const introCta = document.querySelector('#intro-cta')
   overlay.classList.toggle('is-special', extended)
-  if (introTitle) introTitle.textContent = extended ? 'Vecerni Intro' : 'QR Rush Intro'
+  if (introTitle) introTitle.textContent = extended ? 'Vecerni Intro' : 'Lovilec pozornosti Intro'
   if (introSub) introSub.textContent = extended
     ? 'Skrati vabijo vse v igro in na logout.org stojnico!'
     : 'Skrati vabijo v igro. Pripravi telefon!'
@@ -1831,7 +1831,7 @@ function renderPlayer() {
     try {
       if (navigator.share) {
         await navigator.share({
-          title: 'QR Rush x logout.org',
+          title: 'Lovilec pozornosti x logout.org',
           text: postGameShareText,
           url: postGameShareUrl,
         })
@@ -1857,7 +1857,7 @@ function renderPlayer() {
       const file = await dataUrlToFile(postGameShareImage, `qr-rush-${Date.now()}.png`)
       if (navigator.share && navigator.canShare?.({ files: [file] })) {
         await navigator.share({
-          title: 'QR Rush x logout.org',
+          title: 'Lovilec pozornosti x logout.org',
           text: postGameShareText,
           files: [file],
         })

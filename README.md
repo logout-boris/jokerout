@@ -1,4 +1,4 @@
-# JokerOut QR Rush
+# JokerOut Lovilec pozornosti
 
 Solo kiosk game for concert visitors. Players scan a moving QR code and receive positive "be present" messages after each catch.
 
