@@ -113,6 +113,7 @@ let soloMoveTimer = null
 let soloRoundExpiryTimer = null
 let soloNextRoundTimer = null
 let soloGameOverRevealTimer = null
+let soloPostGameStarterTimer = null
 let soloSkinIndex = 0
 let kioskSessionId = ''
 let kioskRealtimeChannel = null
@@ -419,6 +420,10 @@ function clearSoloTimers() {
     clearTimeout(soloGameOverRevealTimer)
     soloGameOverRevealTimer = null
   }
+  if (soloPostGameStarterTimer) {
+    clearTimeout(soloPostGameStarterTimer)
+    soloPostGameStarterTimer = null
+  }
   if (kioskStartDelayTimer) {
     clearTimeout(kioskStartDelayTimer)
     kioskStartDelayTimer = null
@@ -509,11 +514,19 @@ function finishSoloGame(reason = 'gameover') {
       lateGameOver.classList.remove('show')
     }
     const lateStarter = document.querySelector('#starter-card')
-    if (lateStarter) lateStarter.classList.remove('hidden')
+    if (lateStarter) lateStarter.classList.add('hidden')
     showKioskLeaderboardTemporarily(3000)
     renderSoloGameOver()
     const lateHint = document.querySelector('#hint')
-    if (lateHint) lateHint.textContent = 'Za novo igro naj igralec skenira zacetni QR.'
+    if (lateHint) lateHint.textContent = 'Top 20 ...'
+    if (soloPostGameStarterTimer) clearTimeout(soloPostGameStarterTimer)
+    soloPostGameStarterTimer = setTimeout(() => {
+      hideKioskLeaderboard()
+      const restartStarter = document.querySelector('#starter-card')
+      if (restartStarter) restartStarter.classList.remove('hidden')
+      const restartHint = document.querySelector('#hint')
+      if (restartHint) restartHint.textContent = 'Za novo igro naj igralec skenira zacetni QR.'
+    }, 3000)
   }, 1300)
 }
 

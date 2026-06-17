@@ -121,6 +121,10 @@ p {
   text-align: center;
 }
 
+.ascii-dwarf:empty {
+  display: none;
+}
+
 code {
   background: rgba(30, 41, 59, 0.8);
   padding: 2px 8px;
