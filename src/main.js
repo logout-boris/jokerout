@@ -836,6 +836,83 @@ function getCaughtDwarf(tokenId = '') {
   return DWARVES[hashText(tokenId || `${Date.now()}`) % DWARVES.length]
 }
 
+function wrapCanvasText(ctx, text, maxWidth) {
+  const words = String(text || '').split(/\s+/).filter(Boolean)
+  const lines = []
+  let current = ''
+  words.forEach((word) => {
+    const candidate = current ? `${current} ${word}` : word
+    if (ctx.measureText(candidate).width <= maxWidth || !current) {
+      current = candidate
+    } else {
+      lines.push(current)
+      current = word
+    }
+  })
+  if (current) lines.push(current)
+  return lines
+}
+
+function createPostGameShareImage({ playerName = 'Anon', catches = 0, motivation = '' } = {}) {
+  const canvas = document.createElement('canvas')
+  const width = 1080
+  const height = 1350
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return ''
+
+  const grad = ctx.createLinearGradient(0, 0, width, height)
+  grad.addColorStop(0, '#0b1738')
+  grad.addColorStop(0.6, '#09112b')
+  grad.addColorStop(1, '#020617')
+  ctx.fillStyle = grad
+  ctx.fillRect(0, 0, width, height)
+
+  ctx.strokeStyle = 'rgba(56, 189, 248, 0.55)'
+  ctx.lineWidth = 4
+  ctx.strokeRect(36, 36, width - 72, height - 72)
+
+  ctx.fillStyle = '#5eead4'
+  ctx.font = '700 42px Inter, sans-serif'
+  ctx.fillText('logout.org', 78, 112)
+
+  ctx.fillStyle = '#f8fafc'
+  ctx.font = '800 88px Inter, sans-serif'
+  ctx.fillText('QR Rush', 78, 210)
+
+  const dwarf = DWARVES[Math.abs(Number(catches) || 0) % DWARVES.length]
+  ctx.fillStyle = '#d9f99d'
+  ctx.font = '700 36px Consolas, Menlo, monospace'
+  const dwarfLines = dwarf.split('\n')
+  dwarfLines.forEach((line, idx) => {
+    ctx.fillText(line, 82, 320 + idx * 42)
+  })
+
+  ctx.fillStyle = '#fde68a'
+  ctx.font = '700 50px Inter, sans-serif'
+  ctx.fillText(`${playerName} je ujel ${catches} skratov`, 78, 560)
+
+  ctx.fillStyle = '#bfdbfe'
+  ctx.font = '600 34px Inter, sans-serif'
+  const messageLines = wrapCanvasText(ctx, motivation, width - 156)
+  messageLines.slice(0, 8).forEach((line, idx) => {
+    ctx.fillText(line, 78, 650 + idx * 48)
+  })
+
+  ctx.fillStyle = '#93c5fd'
+  ctx.font = '600 30px Inter, sans-serif'
+  ctx.fillText('Ujemi trenutek. Ne notifikacij.', 78, height - 112)
+
+  return canvas.toDataURL('image/png')
+}
+
+async function dataUrlToFile(dataUrl, filename = 'qr-rush-share.png') {
+  const response = await fetch(dataUrl)
+  const blob = await response.blob()
+  return new File([blob], filename, { type: blob.type || 'image/png' })
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -1573,6 +1650,13 @@ function renderPlayer() {
     ? `Ujel sem ${postGame.catches} skratov, ki nam jemljejo pozornost. ${postGame.motivation}`
     : ''
   const postGameShareUrl = `${window.location.origin}${window.location.pathname}#/player`
+  const postGameShareImage = canSharePostGame
+    ? createPostGameShareImage({
+      playerName: profile.name || 'Anon',
+      catches: postGame.catches,
+      motivation: postGame.motivation,
+    })
+    : ''
   const myRows = rows
     .filter((row) => row.playerId === profile.id)
     .sort((a, b) => b.points - a.points || a.reactionMs - b.reactionMs)
@@ -1607,8 +1691,11 @@ function renderPlayer() {
           <h2>Game over povzetek</h2>
           <p>Ujel si <strong>${postGame.catches}</strong> skratov, ki jemljejo pozornost.</p>
           <p class="vibe">${postGame.motivation}</p>
+          ${postGameShareImage ? `<img class="postgame-share-preview" src="${postGameShareImage}" alt="Share povzetek" />` : ''}
           <div class="actions">
             <button id="share-postgame" class="btn primary">Deli z vsemi</button>
+            <button id="share-postgame-image" class="btn primary">Deli sliko</button>
+            <button id="save-postgame-image" class="btn">Shrani sliko</button>
             <a class="btn" href="https://wa.me/?text=${encodeURIComponent(`${postGameShareText} ${postGameShareUrl}`)}" target="_blank" rel="noopener noreferrer">WhatsApp</a>
             <button id="clear-postgame" class="btn">Skrij</button>
           </div>
@@ -1658,6 +1745,32 @@ function renderPlayer() {
       }
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(`${postGameShareText} ${postGameShareUrl}`)
+      }
+    } catch {
+      // Ignore cancellation/errors from share dialogs.
+    }
+  })
+  document.querySelector('#save-postgame-image')?.addEventListener('click', () => {
+    if (!postGameShareImage) return
+    const link = document.createElement('a')
+    link.href = postGameShareImage
+    link.download = `qr-rush-${Date.now()}.png`
+    link.click()
+  })
+  document.querySelector('#share-postgame-image')?.addEventListener('click', async () => {
+    if (!postGameShareImage) return
+    try {
+      const file = await dataUrlToFile(postGameShareImage, `qr-rush-${Date.now()}.png`)
+      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({
+          title: 'QR Rush x logout.org',
+          text: postGameShareText,
+          files: [file],
+        })
+        return
+      }
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(postGameShareUrl)
       }
     } catch {
       // Ignore cancellation/errors from share dialogs.

@@ -383,6 +383,15 @@ input {
   background: rgba(30, 41, 59, 0.42);
 }
 
+.postgame-share-preview {
+  display: block;
+  width: min(100%, 360px);
+  margin-top: 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  box-shadow: 0 0 0 2px rgba(2, 6, 23, 0.7);
+}
+
 .scan-frame {
   margin-top: 10px;
   border-radius: 12px;
