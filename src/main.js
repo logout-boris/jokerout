@@ -290,21 +290,6 @@ async function sendGlobalEvent(event, payload = {}) {
   }
 }
 
-function hideKioskLeaderboard() {
-  const section = document.querySelector('#kiosk-leaderboard')
-  if (section) section.classList.add('hidden')
-}
-
-function showKioskLeaderboardTemporarily(durationMs = 3000) {
-  const section = document.querySelector('#kiosk-leaderboard')
-  if (!section) return
-  section.classList.remove('hidden')
-  if (kioskLeaderboardTimer) clearTimeout(kioskLeaderboardTimer)
-  kioskLeaderboardTimer = setTimeout(() => {
-    section.classList.add('hidden')
-  }, durationMs)
-}
-
 async function setupGlobalRealtime() {
   if (globalRealtimeChannel) return
   const channel = supabase.channel(GLOBAL_CHANNEL_NAME)
@@ -329,15 +314,14 @@ async function setupKioskRealtime(sessionId) {
     renderKioskEventPanel()
     if (!soloGameState.active) {
       const hint = document.querySelector('#hint')
-      if (hint) hint.textContent = 'Lestvica 3s... nato start!'
-      showKioskLeaderboardTemporarily(3000)
+      if (hint) hint.textContent = 'Igra se zacenja ...'
       if (kioskStartDelayTimer) clearTimeout(kioskStartDelayTimer)
       kioskStartDelayTimer = setTimeout(() => {
         startSoloGame({
           playerId: payload?.playerId || '',
           playerName: payload?.playerName || 'Anon',
         })
-      }, 3000)
+      }, 1200)
     }
   })
   channel.on('broadcast', { event: 'catch' }, ({ payload }) => {
@@ -668,7 +652,6 @@ function finishSoloGame(reason = 'gameover') {
   }
   const result = document.querySelector('#solo-result')
   if (result) result.classList.add('hidden')
-  hideKioskLeaderboard()
   const gameOver = document.querySelector('#gameover-banner')
   if (gameOver) {
     gameOver.textContent = completedAllLevels ? 'KONEC IGRE' : 'GAME OVER'
@@ -684,13 +667,11 @@ function finishSoloGame(reason = 'gameover') {
     }
     const lateStarter = document.querySelector('#starter-card')
     if (lateStarter) lateStarter.classList.add('hidden')
-    showKioskLeaderboardTemporarily(3000)
     renderSoloGameOver()
     const lateHint = document.querySelector('#hint')
-    if (lateHint) lateHint.textContent = 'Top 20 ...'
+    if (lateHint) lateHint.textContent = 'Konec igre ...'
     if (soloPostGameStarterTimer) clearTimeout(soloPostGameStarterTimer)
     soloPostGameStarterTimer = setTimeout(() => {
-      hideKioskLeaderboard()
       const restartStarter = document.querySelector('#starter-card')
       if (restartStarter) restartStarter.classList.remove('hidden')
       const restartHint = document.querySelector('#hint')
@@ -705,7 +686,6 @@ function startSoloGame(player = null) {
   currentSoloRound = null
   const levelConfig = getSoloLevelConfig(1)
   soloVisualState = { size: levelConfig.qrSize, hue: 0 }
-  hideKioskLeaderboard()
   incrementEventGamesPlayed()
   soloGameState = {
     active: true,
@@ -838,20 +818,10 @@ function pushEventTopEntry(entry) {
 function renderKioskEventPanel() {
   const gamesEl = document.querySelector('#event-games')
   const participantsEl = document.querySelector('#event-participants')
-  const topEl = document.querySelector('#event-top20')
-  if (!gamesEl || !participantsEl || !topEl) return
+  if (!gamesEl || !participantsEl) return
   const stats = getEventStats()
   gamesEl.textContent = `${stats.gamesPlayed}`
   participantsEl.textContent = `${stats.participants.length}`
-
-  const rows = getEventTop20()
-  if (!rows.length) {
-    topEl.innerHTML = '<li><span class="muted">Se ni rezultatov.</span><strong>-</strong></li>'
-    return
-  }
-  topEl.innerHTML = rows
-    .map((row) => `<li><span>${row.playerName || 'Anon'}</span><strong>${row.points} pts</strong></li>`)
-    .join('')
 }
 
 function resetEventData() {
@@ -1109,10 +1079,6 @@ async function renderSoloKiosk() {
             <p class="small session-line">Session: <code id="session-code">${kioskSessionId}</code></p>
             <div class="qr-wrap mini"><img id="starter-qr" alt="Start game QR" /></div>
           </section>
-          <section id="kiosk-leaderboard" class="card-sub stage-panel stage-leaderboard hidden">
-            <h3>Top 20</h3>
-            <ol id="event-top20" class="board event-board"></ol>
-          </section>
           <section id="solo-result" class="card-sub stage-panel hidden"></section>
           <div id="solo-burst" class="solo-burst"></div>
           <div id="gameover-banner" class="gameover-banner hidden">GAME OVER</div>
@@ -1207,7 +1173,7 @@ async function renderSoloKiosk() {
     resetEventData()
     renderKioskEventPanel()
     if (pinInput) pinInput.value = ''
-    if (meta) meta.textContent = 'Event statistika in Top 20 sta ponastavljena.'
+    if (meta) meta.textContent = 'Event statistika je ponastavljena.'
   })
   await renderStarterQr()
   try {
@@ -1226,7 +1192,6 @@ async function renderSoloKiosk() {
   kioskIdleIntroCount = 0
   await playKioskIntro()
   startKioskIdleIntroLoop()
-  showKioskLeaderboardTemporarily(3000)
 }
 
 async function playKioskIntro({ extended = false } = {}) {
@@ -1777,7 +1742,6 @@ async function generateRoundTokens(runId) {
 function renderPlayer() {
   const profile = getPlayerProfile()
   const rows = getLeaderboardRows()
-  const globalRows = getEventTop20()
   const postGame = getLastGameOverSummary()
   const canSharePostGame = postGame?.playerId === profile.id
   const surveyCompleted = canSharePostGame && postGame?.surveyCompleted
@@ -1901,17 +1865,6 @@ function renderPlayer() {
         `}
       </section>
 
-      <section class="card">
-        <h2>Skupna lestvica (Top 20)</h2>
-        <p class="small muted">Deluje v zivo med aktivnimi zasloni (kiosk/player), posodobitev pride prek realtime dogodkov.</p>
-        ${globalRows.length === 0 ? '<p class="muted">Se ni rezultatov.</p>' : `
-          <ol class="board event-board">
-            ${globalRows
-              .map((row) => `<li><span>${row.playerName || 'Anon'}</span><strong>${row.points} pts</strong></li>`)
-              .join('')}
-          </ol>
-        `}
-      </section>
     </main>
   `
 
