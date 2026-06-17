@@ -64,6 +64,13 @@ function getSoloRoundTtlMs(mode, roundIndex) {
   return Math.max(config.ttlMs, firstRoundMs - roundIndex * stepDownMs)
 }
 
+function isPhonePlayerDevice() {
+  const ua = navigator.userAgent || ''
+  const mobileUa = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(ua)
+  const touchNarrow = window.matchMedia('(max-width: 900px)').matches && navigator.maxTouchPoints > 0
+  return mobileUa || touchNarrow
+}
+
 function parseRoute() {
   const hash = window.location.hash || '#/'
   const [pathPart, queryString = ''] = hash.slice(1).split('?')
@@ -830,7 +837,10 @@ async function generateRoundTokens(runId) {
 function renderPlayer() {
   const profile = getPlayerProfile()
   const rows = getLeaderboardRows()
-  const myRows = rows.filter((row) => row.playerId === profile.id)
+  const myRows = rows
+    .filter((row) => row.playerId === profile.id)
+    .sort((a, b) => b.points - a.points || a.reactionMs - b.reactionMs)
+  const best = myRows[0]
 
   app.innerHTML = `
     <main class="page">
@@ -845,10 +855,19 @@ function renderPlayer() {
       </section>
 
       <section class="card">
-        <h2>Lokalna lestvica (ta naprava)</h2>
-        ${rows.length === 0 ? '<p class="muted">Ni rezultatov.</p>' : `
+        <h2>Tvoj rekord</h2>
+        ${best ? `
+          <p class="record-badge">${best.points} pts</p>
+          <p class="small">Najhitrejsi odziv: ${best.reactionMs} ms</p>
+          <p class="small">Izziv: ${best.text || 'Solo challenge'}</p>
+        ` : '<p class="muted">Se ni rezultata. Ujemi prvo QR kodo.</p>'}
+      </section>
+
+      <section class="card">
+        <h2>Moji rezultati</h2>
+        ${myRows.length === 0 ? '<p class="muted">Ni rezultatov.</p>' : `
           <ol class="board">
-            ${rows
+            ${myRows
               .map((row) => `<li><span>${row.name} (${row.slot || '-'})</span><strong>${row.points} pts</strong><em>${row.reactionMs} ms</em></li>`)
               .join('')}
           </ol>
@@ -991,6 +1010,11 @@ function renderJoin(params) {
 
 function render() {
   const { path, params } = parseRoute()
+  const blockKioskForPhone = isPhonePlayerDevice() && ['/', '/solo-kiosk', '/duel-kiosk'].includes(path)
+  if (blockKioskForPhone) {
+    navigate('/player')
+    return
+  }
   if (path !== '/solo-kiosk') {
     app.classList.remove('kiosk-app')
     clearSoloTimers()

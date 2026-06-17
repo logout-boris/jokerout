@@ -208,6 +208,19 @@ input {
   color: #bbf7d0;
 }
 
+.record-badge {
+  display: inline-block;
+  margin-top: 6px;
+  margin-bottom: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 24px;
+  font-weight: 700;
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.18);
+  border: 1px solid rgba(245, 158, 11, 0.55);
+}
+
 .solo-stage {
   margin-top: 10px;
   width: 100%;
