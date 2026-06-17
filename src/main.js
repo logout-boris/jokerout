@@ -74,6 +74,11 @@ function getSoloRoundTtlMs(mode, roundIndex) {
   return Math.max(config.ttlMs, firstRoundMs - roundIndex * stepDownMs)
 }
 
+function getSoloMovementMultiplier(level) {
+  const safeLevel = Math.max(1, Number(level) || 1)
+  return Math.min(1.85, 1 + (safeLevel - 1) * 0.08)
+}
+
 function isPhonePlayerDevice() {
   const ua = navigator.userAgent || ''
   const mobileUa = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(ua)
@@ -703,16 +708,17 @@ function stopSoloMovement() {
   }
 }
 
-function startSoloMovement() {
+function startSoloMovement(level = 1) {
   stopSoloMovement()
   const stage = document.querySelector('#solo-stage')
   const qrNode = document.querySelector('#solo-qr-node')
   if (!stage || !qrNode) return
 
+  const speed = getSoloMovementMultiplier(level)
   let x = 20
   let y = 20
-  let vx = 2.8
-  let vy = 2.2
+  let vx = 2.8 * speed
+  let vy = 2.2 * speed
 
   soloMoveTimer = setInterval(() => {
     const stageRect = stage.getBoundingClientRect()
@@ -832,7 +838,7 @@ async function generateSoloToken(runId) {
   if (countEl) countEl.textContent = ''
   if (asciiEl) asciiEl.textContent = ''
   applySoloQrVisual()
-  startSoloMovement()
+  startSoloMovement(soloGameState.level)
   updateSoloHud()
 
   if (soloRoundExpiryTimer) clearTimeout(soloRoundExpiryTimer)
