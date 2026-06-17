@@ -75,9 +75,16 @@ function getSoloRoundTtlMs(mode, roundIndex) {
   return Math.max(config.ttlMs, firstRoundMs - roundIndex * stepDownMs)
 }
 
-function getSoloMovementMultiplier(level) {
+function getSoloMovementMultiplier(level, mode = 'normal') {
   const safeLevel = Math.max(1, Number(level) || 1)
-  return Math.min(1.85, 1 + (safeLevel - 1) * 0.08)
+  const curves = {
+    easy: { step: 0.045, max: 1.42 },
+    normal: { step: 0.065, max: 1.62 },
+    hard: { step: 0.085, max: 1.82 },
+    insane: { step: 0.1, max: 2.0 },
+  }
+  const curve = curves[mode] || curves.normal
+  return Math.min(curve.max, 1 + (safeLevel - 1) * curve.step)
 }
 
 function isPhonePlayerDevice() {
@@ -732,13 +739,13 @@ function stopSoloMovement() {
   }
 }
 
-function startSoloMovement(level = 1) {
+function startSoloMovement(level = 1, mode = 'normal') {
   stopSoloMovement()
   const stage = document.querySelector('#solo-stage')
   const qrNode = document.querySelector('#solo-qr-node')
   if (!stage || !qrNode) return
 
-  const speed = getSoloMovementMultiplier(level)
+  const speed = getSoloMovementMultiplier(level, mode)
   let x = 20
   let y = 20
   let vx = 2.8 * speed
@@ -862,7 +869,7 @@ async function generateSoloToken(runId) {
   if (countEl) countEl.textContent = ''
   if (asciiEl) asciiEl.textContent = ''
   applySoloQrVisual()
-  startSoloMovement(soloGameState.level)
+  startSoloMovement(soloGameState.level, mode)
   updateSoloHud()
 
   if (soloRoundExpiryTimer) clearTimeout(soloRoundExpiryTimer)
