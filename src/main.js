@@ -1,7 +1,11 @@
 import QRCode from 'qrcode'
+import { createClient } from '@supabase/supabase-js'
 import './style.css'
 
 const app = document.querySelector('#app')
+const SUPABASE_URL = 'https://hezvtqurbxaxmvcrmuuu.supabase.co'
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_QkiVaVk0SKwT4CrF0PF4aA_DjvdGbTi'
+const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
 
 const STORAGE = {
   profile: 'joqr.player.profile',
@@ -50,6 +54,8 @@ let soloMoveTimer = null
 let soloRoundExpiryTimer = null
 let soloNextRoundTimer = null
 let soloSkinIndex = 0
+let kioskSessionId = ''
+let kioskRealtimeChannel = null
 let soloGameState = {
   active: false,
   lives: 3,
@@ -69,6 +75,78 @@ function isPhonePlayerDevice() {
   const mobileUa = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(ua)
   const touchNarrow = window.matchMedia('(max-width: 900px)').matches && navigator.maxTouchPoints > 0
   return mobileUa || touchNarrow
+}
+
+function createKioskSessionId() {
+  return crypto.randomUUID ? crypto.randomUUID() : `kiosk-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
+}
+
+function getSessionChannelName(sessionId) {
+  return `kiosk-session-${sessionId}`
+}
+
+async function teardownKioskRealtime() {
+  if (!kioskRealtimeChannel) return
+  const current = kioskRealtimeChannel
+  kioskRealtimeChannel = null
+  try {
+    await supabase.removeChannel(current)
+  } catch {
+    // Ignore teardown failures; next channel subscription can still proceed.
+  }
+}
+
+async function waitForChannelSubscribed(channel, timeoutMs = 4000) {
+  await new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('Realtime subscribe timeout')), timeoutMs)
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        clearTimeout(timeout)
+        resolve()
+      }
+      if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') {
+        clearTimeout(timeout)
+        reject(new Error(`Realtime status: ${status}`))
+      }
+    })
+  })
+}
+
+async function sendSessionEvent(sessionId, event, payload = {}) {
+  if (!sessionId) return
+  const channel = supabase.channel(getSessionChannelName(sessionId))
+  try {
+    await waitForChannelSubscribed(channel)
+    await channel.send({
+      type: 'broadcast',
+      event,
+      payload: {
+        sessionId,
+        ...payload,
+        sentAt: Date.now(),
+      },
+    })
+  } finally {
+    await supabase.removeChannel(channel)
+  }
+}
+
+async function setupKioskRealtime(sessionId) {
+  await teardownKioskRealtime()
+  const channel = supabase.channel(getSessionChannelName(sessionId))
+  channel.on('broadcast', { event: 'start_game' }, ({ payload }) => {
+    if (payload?.sessionId !== kioskSessionId) return
+    if (!soloGameState.active) {
+      startSoloGame()
+    }
+  })
+  channel.on('broadcast', { event: 'catch' }, ({ payload }) => {
+    if (payload?.sessionId !== kioskSessionId) return
+    if (currentSoloRound?.tokenId !== payload?.tokenId) return
+    confirmSoloCatch()
+  })
+  await waitForChannelSubscribed(channel)
+  kioskRealtimeChannel = channel
 }
 
 function parseRoute() {
@@ -356,6 +434,7 @@ function renderHome() {
 
 async function renderSoloKiosk() {
   app.classList.add('kiosk-app')
+  kioskSessionId = createKioskSessionId()
   const baseUrl = getQrBaseUrl()
   app.innerHTML = `
     <main class="page kiosk-page">
@@ -389,7 +468,12 @@ async function renderSoloKiosk() {
           <button id="save-base-url" class="btn">Shrani URL</button>
         </div>
         <p class="small">Kiosk mora biti odprt na istem URL, ki je nastavljen tukaj.</p>
-        <p class="muted" id="meta">Skeniraj gibajoco QR kodo. Brez tipkanja kod - samo ulovi in uzivaj.</p>
+        <p class="muted" id="meta">Igralec skenira zacetni QR in sam sprozi igro. Brez admin klikov med igro.</p>
+        <section class="card-sub starter-card">
+          <h3>Zacetni QR (start igre)</h3>
+          <p class="small">Session: <code id="session-code">${kioskSessionId}</code></p>
+          <div class="qr-wrap mini"><img id="starter-qr" alt="Start game QR" /></div>
+        </section>
         <p class="countdown" id="countdown"></p>
         <pre id="ascii-dwarf" class="ascii-dwarf"></pre>
         <div id="solo-stage" class="solo-stage">
@@ -398,9 +482,6 @@ async function renderSoloKiosk() {
           <div id="solo-qr-node" class="monster-frame hidden">
             <img id="solo-qr" alt="Solo round QR" />
           </div>
-        </div>
-        <div class="inline-form">
-          <button id="confirm-catch" class="btn primary">Ujeto!</button>
         </div>
         <p class="small" id="hint"></p>
         <section id="solo-result" class="card-sub hidden"></section>
@@ -427,7 +508,6 @@ async function renderSoloKiosk() {
   syncFullscreenLabel()
   document.querySelector('#start-game')?.addEventListener('click', () => startSoloGame())
   document.querySelector('#start-round')?.addEventListener('click', () => startSoloRound())
-  document.querySelector('#confirm-catch')?.addEventListener('click', () => confirmSoloCatch())
   document.querySelector('#save-base-url')?.addEventListener('click', async () => {
     const input = document.querySelector('#qr-base-url')
     const ok = setQrBaseUrl(input?.value || '')
@@ -437,9 +517,28 @@ async function renderSoloKiosk() {
       return
     }
     if (meta) meta.textContent = 'QR Base URL shranjen.'
-    await startSoloRound()
+    await renderStarterQr()
   })
+  await renderStarterQr()
+  try {
+    await setupKioskRealtime(kioskSessionId)
+  } catch {
+    const hint = document.querySelector('#hint')
+    if (hint) hint.textContent = 'Realtime povezava ni uspela. Preveri Supabase nastavitve.'
+  }
   updateSoloHud()
+}
+
+async function renderStarterQr() {
+  const target = document.querySelector('#starter-qr')
+  if (!target || !kioskSessionId) return
+  const startUrl = `${getQrBaseUrl()}#/start?session=${encodeURIComponent(kioskSessionId)}`
+  const qr = await QRCode.toDataURL(startUrl, {
+    errorCorrectionLevel: 'M',
+    margin: 1,
+    width: 360,
+  })
+  target.src = qr
 }
 
 function stopSoloMovement() {
@@ -541,6 +640,7 @@ async function generateSoloToken(runId) {
 
   const payload = {
     type: 'solo-round',
+    sessionId: kioskSessionId || null,
     tokenId,
     text: message.text,
     base: message.base,
@@ -960,6 +1060,15 @@ function renderClaim(params) {
       }
       triggerSoloBurst()
     }
+    if (payload.sessionId) {
+      sendSessionEvent(payload.sessionId, 'catch', {
+        tokenId: payload.tokenId,
+        playerId: profile.id,
+        playerName: profile.name || 'Anon',
+      }).catch(() => {
+        // Keep claim UX resilient even if realtime send fails.
+      })
+    }
   }
 
   app.innerHTML = `
@@ -979,6 +1088,41 @@ function renderClaim(params) {
 
   document.querySelector('#go-home')?.addEventListener('click', () => navigate('/'))
   document.querySelector('#go-player')?.addEventListener('click', () => navigate('/player'))
+}
+
+function renderStart(params) {
+  const sessionId = params.get('session')
+  const profile = getPlayerProfile()
+  app.innerHTML = `
+    <main class="page">
+      <section class="card">
+        <h1>Start signal</h1>
+        <p>Igra se pripravlja na kiosku.</p>
+        <p class="small">Session: <code>${sessionId || 'n/a'}</code></p>
+        <p class="small">Igralec: <strong>${profile.name || 'Anon'}</strong></p>
+        <div class="actions">
+          <button id="go-player" class="btn primary">Moji rezultati</button>
+        </div>
+        <p id="start-status" class="muted"></p>
+      </section>
+    </main>
+  `
+  document.querySelector('#go-player')?.addEventListener('click', () => navigate('/player'))
+  const status = document.querySelector('#start-status')
+  if (!sessionId) {
+    if (status) status.textContent = 'Start QR nima session parametra.'
+    return
+  }
+  sendSessionEvent(sessionId, 'start_game', {
+    playerId: profile.id,
+    playerName: profile.name || 'Anon',
+  })
+    .then(() => {
+      if (status) status.textContent = 'Signal poslan. Poglej kiosk zaslon.'
+    })
+    .catch(() => {
+      if (status) status.textContent = 'Signal ni uspel. Poskusi skenirati znova.'
+    })
 }
 
 function renderJoin(params) {
@@ -1035,6 +1179,7 @@ function render() {
   }
   if (path !== '/solo-kiosk') {
     app.classList.remove('kiosk-app')
+    teardownKioskRealtime()
     clearSoloTimers()
     soloGameState.active = false
     currentSoloRound = null
@@ -1049,6 +1194,10 @@ function render() {
   }
   if (path === '/join') {
     renderJoin(params)
+    return
+  }
+  if (path === '/start') {
+    renderStart(params)
     return
   }
   if (path === '/claim') {
