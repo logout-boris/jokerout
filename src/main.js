@@ -343,6 +343,8 @@ function startSoloGame() {
     result.classList.add('hidden')
     result.innerHTML = ''
   }
+  const starter = document.querySelector('#starter-card')
+  if (starter) starter.classList.add('hidden')
   const gameOver = document.querySelector('#gameover-banner')
   if (gameOver) {
     gameOver.classList.add('hidden')
@@ -596,7 +598,7 @@ async function renderSoloKiosk() {
           <p>Razlicni udelezenci: <strong id="event-participants" class="stat-participants">0</strong></p>
         </section>
         <p class="muted retro-note" id="meta">Igralec skenira zacetni QR in sam sprozi igro. Brez admin klikov med igro.</p>
-        <section class="card-sub starter-card">
+        <section id="starter-card" class="card-sub starter-card">
           <h3>Zacetni QR (start igre)</h3>
           <p class="small">Session: <code id="session-code">${kioskSessionId}</code></p>
           <div class="qr-wrap mini"><img id="starter-qr" alt="Start game QR" /></div>
@@ -837,7 +839,7 @@ async function generateSoloToken(runId) {
       }
     }
     const hintEl = document.querySelector('#hint')
-    if (hintEl) hintEl.textContent = `Zgreseno! Izguba zivljenja. Ostala zivljenja: ${soloGameState.lives}. Ponovi level ${soloGameState.level}.`
+    if (hintEl) hintEl.textContent = `Zgreseno! Izguba zivljenja. Ostala zivljenja: ${soloGameState.lives}.`
     startSoloRound()
   }, ttlMs + 50)
 }
@@ -867,7 +869,7 @@ function confirmSoloCatch() {
   updateSoloHud()
   currentSoloRound = null
   const hint = document.querySelector('#hint')
-  if (hint) hint.textContent = `Odlicno! Napredujes na level ${soloGameState.level}.`
+  if (hint) hint.textContent = 'Bravo, nova runda!'
   if (soloNextRoundTimer) clearTimeout(soloNextRoundTimer)
   soloNextRoundTimer = setTimeout(() => {
     if (banner) banner.classList.add('hidden')
