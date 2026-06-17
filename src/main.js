@@ -58,6 +58,8 @@ let soloNextRoundTimer = null
 let soloSkinIndex = 0
 let kioskSessionId = ''
 let kioskRealtimeChannel = null
+let audioCtx = null
+let audioUnlockBound = false
 let soloGameState = {
   active: false,
   lives: 3,
@@ -85,6 +87,43 @@ function createKioskSessionId() {
 
 function getSessionChannelName(sessionId) {
   return `kiosk-session-${sessionId}`
+}
+
+function ensureAudioContext() {
+  if (audioCtx) return audioCtx
+  const Ctx = window.AudioContext || window.webkitAudioContext
+  if (!Ctx) return null
+  audioCtx = new Ctx()
+  return audioCtx
+}
+
+async function unlockAudio() {
+  const ctx = ensureAudioContext()
+  if (!ctx) return
+  if (ctx.state === 'suspended') {
+    try {
+      await ctx.resume()
+    } catch {
+      // Ignore and continue without sound.
+    }
+  }
+}
+
+function playBeep({ freq = 440, durationMs = 120, volume = 0.05, type = 'square' } = {}) {
+  const ctx = ensureAudioContext()
+  if (!ctx || ctx.state !== 'running') return
+  const now = ctx.currentTime
+  const osc = ctx.createOscillator()
+  const gain = ctx.createGain()
+  osc.type = type
+  osc.frequency.setValueAtTime(freq, now)
+  gain.gain.setValueAtTime(0.0001, now)
+  gain.gain.exponentialRampToValueAtTime(volume, now + 0.01)
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + durationMs / 1000)
+  osc.connect(gain)
+  gain.connect(ctx.destination)
+  osc.start(now)
+  osc.stop(now + durationMs / 1000 + 0.02)
 }
 
 async function teardownKioskRealtime() {
@@ -249,7 +288,12 @@ function updateSoloHud() {
   const livesEl = document.querySelector('#solo-lives')
   const levelEl = document.querySelector('#solo-level')
   const catchesEl = document.querySelector('#solo-catches')
-  if (livesEl) livesEl.textContent = `${soloGameState.lives}`
+  if (livesEl) {
+    livesEl.innerHTML = Array.from({ length: 3 }, (_, idx) => {
+      const alive = idx < soloGameState.lives
+      return `<span class="life-dwarf ${alive ? 'alive' : 'lost'}">ᗢ</span>`
+    }).join('')
+  }
   if (levelEl) levelEl.textContent = `${soloGameState.level}`
   if (catchesEl) catchesEl.textContent = `${soloGameState.catches}`
 }
@@ -271,8 +315,14 @@ function finishSoloGame() {
   currentSoloRound = null
   clearSoloTimers()
   updateSoloHud()
+  playBeep({ freq: 180, durationMs: 300, volume: 0.07, type: 'sawtooth' })
   const hint = document.querySelector('#hint')
   if (hint) hint.textContent = 'GAME OVER. Za novo igro naj igralec skenira zacetni QR.'
+  const gameOver = document.querySelector('#gameover-banner')
+  if (gameOver) {
+    gameOver.classList.remove('hidden')
+    gameOver.classList.add('show')
+  }
   renderSoloGameOver()
 }
 
@@ -292,6 +342,11 @@ function startSoloGame() {
   if (result) {
     result.classList.add('hidden')
     result.innerHTML = ''
+  }
+  const gameOver = document.querySelector('#gameover-banner')
+  if (gameOver) {
+    gameOver.classList.add('hidden')
+    gameOver.classList.remove('show')
   }
   updateSoloHud()
   renderKioskEventPanel()
@@ -532,30 +587,34 @@ async function renderSoloKiosk() {
           </select>
         </div>
         <div class="hud">
-          <p>Zivljenja: <strong id="solo-lives">3</strong></p>
-          <p>Level: <strong id="solo-level">1</strong></p>
-          <p>Ulovi: <strong id="solo-catches">0</strong></p>
+          <p>Zivljenja: <strong id="solo-lives" class="lives-pixels"></strong></p>
+          <p>Level: <strong id="solo-level" class="stat-level">1</strong></p>
+          <p>Ulovi: <strong id="solo-catches" class="stat-catches">0</strong></p>
         </div>
         <section class="card-sub event-summary">
-          <p>Iger odigranih: <strong id="event-games">0</strong></p>
-          <p>Razlicni udelezenci: <strong id="event-participants">0</strong></p>
+          <p>Iger odigranih: <strong id="event-games" class="stat-games">0</strong></p>
+          <p>Razlicni udelezenci: <strong id="event-participants" class="stat-participants">0</strong></p>
         </section>
-        <div class="inline-form">
-          <label for="qr-base-url">QR Base URL</label>
-          <input id="qr-base-url" value="${baseUrl}" placeholder="http://192.168.x.x:5173" />
-          <button id="save-base-url" class="btn">Shrani URL</button>
-        </div>
-        <p class="small">Kiosk mora biti odprt na istem URL, ki je nastavljen tukaj.</p>
-        <p class="muted" id="meta">Igralec skenira zacetni QR in sam sprozi igro. Brez admin klikov med igro.</p>
+        <p class="muted retro-note" id="meta">Igralec skenira zacetni QR in sam sprozi igro. Brez admin klikov med igro.</p>
         <section class="card-sub starter-card">
           <h3>Zacetni QR (start igre)</h3>
           <p class="small">Session: <code id="session-code">${kioskSessionId}</code></p>
           <div class="qr-wrap mini"><img id="starter-qr" alt="Start game QR" /></div>
         </section>
+        <details class="card-sub settings-toggle">
+          <summary>Nastavitve kioska</summary>
+          <div class="inline-form">
+            <label for="qr-base-url">QR Base URL</label>
+            <input id="qr-base-url" value="${baseUrl}" placeholder="http://192.168.x.x:5173" />
+            <button id="save-base-url" class="btn">Shrani URL</button>
+          </div>
+          <p class="small">Kiosk mora biti odprt na istem URL, ki je nastavljen tukaj.</p>
+        </details>
         <p class="countdown" id="countdown"></p>
         <pre id="ascii-dwarf" class="ascii-dwarf"></pre>
         <div id="solo-stage" class="solo-stage">
           <div id="solo-burst" class="solo-burst"></div>
+          <div id="gameover-banner" class="gameover-banner hidden">GAME OVER</div>
           <div id="catch-banner" class="catch-banner hidden">UJETO!</div>
           <div id="solo-qr-node" class="monster-frame hidden">
             <img id="solo-qr" alt="Solo round QR" />
@@ -578,6 +637,7 @@ async function renderSoloKiosk() {
   }
   document.addEventListener('fullscreenchange', syncFullscreenLabel)
   fullscreenBtn?.addEventListener('click', async () => {
+    await unlockAudio()
     try {
       await toggleFullscreen()
     } catch {
@@ -587,7 +647,12 @@ async function renderSoloKiosk() {
     syncFullscreenLabel()
   })
   syncFullscreenLabel()
+  if (!audioUnlockBound) {
+    window.addEventListener('pointerdown', unlockAudio)
+    audioUnlockBound = true
+  }
   document.querySelector('#save-base-url')?.addEventListener('click', async () => {
+    await unlockAudio()
     const input = document.querySelector('#qr-base-url')
     const ok = setQrBaseUrl(input?.value || '')
     const meta = document.querySelector('#meta')
@@ -697,10 +762,12 @@ async function startSoloRound() {
     if (runId !== soloRunNonce) return
     if (countEl) countEl.textContent = `Runda se zacne cez ${left} ...`
     if (asciiEl) asciiEl.textContent = DWARVES[Math.floor(Math.random() * DWARVES.length)]
+    playBeep({ freq: 420 + (3 - left) * 60, durationMs: 110, volume: 0.05 })
     await sleep(1000)
   }
   if (runId !== soloRunNonce) return
   triggerSoloBurst()
+  playBeep({ freq: 900, durationMs: 150, volume: 0.065, type: 'triangle' })
   if (countEl) countEl.textContent = 'GO!'
   await generateSoloToken(runId)
 }
@@ -789,6 +856,7 @@ function confirmSoloCatch() {
   }
   applySoloQrVisual()
   triggerSoloBurst()
+  playBeep({ freq: 1120, durationMs: 130, volume: 0.07, type: 'square' })
   const banner = document.querySelector('#catch-banner')
   if (banner) {
     banner.classList.remove('hidden')

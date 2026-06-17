@@ -201,6 +201,24 @@ input {
   flex-wrap: wrap;
 }
 
+.retro-note {
+  color: #fde68a;
+}
+
+.settings-toggle {
+  margin-top: 10px;
+}
+
+.settings-toggle summary {
+  cursor: pointer;
+  color: #93c5fd;
+  font-weight: 600;
+}
+
+.settings-toggle[open] summary {
+  margin-bottom: 8px;
+}
+
 .join-code {
   margin-top: 12px;
   font-size: 24px;
@@ -276,6 +294,29 @@ input {
 
 .catch-banner.show {
   animation: catchPop 820ms ease-out;
+}
+
+.gameover-banner {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: clamp(52px, 10vw, 132px);
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: #fda4af;
+  text-shadow:
+    0 0 8px rgba(251, 113, 133, 0.9),
+    0 0 24px rgba(239, 68, 68, 0.75);
+  background: linear-gradient(180deg, rgba(127, 29, 29, 0.12), rgba(127, 29, 29, 0.45));
+  pointer-events: none;
+  z-index: 5;
+  opacity: 0;
+}
+
+.gameover-banner.show {
+  opacity: 1;
+  animation: gameOverPulse 1s steps(2) infinite;
 }
 
 @keyframes catchPop {
@@ -440,6 +481,55 @@ input {
   display: flex;
   gap: 16px;
   flex-wrap: wrap;
+}
+
+.lives-pixels {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.life-dwarf {
+  display: inline-block;
+  font-family: Consolas, Menlo, monospace;
+  font-size: 21px;
+  text-shadow: 0 0 8px rgba(34, 211, 238, 0.5);
+}
+
+.life-dwarf.alive {
+  color: #a3e635;
+}
+
+.life-dwarf.lost {
+  color: #64748b;
+  opacity: 0.35;
+}
+
+.stat-level {
+  color: #93c5fd;
+}
+
+.stat-catches {
+  color: #facc15;
+}
+
+.stat-games {
+  color: #c4b5fd;
+}
+
+.stat-participants {
+  color: #5eead4;
+}
+
+@keyframes gameOverPulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.03);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 .hidden {
