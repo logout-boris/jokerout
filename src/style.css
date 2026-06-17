@@ -340,6 +340,7 @@ input {
 }
 
 .starter-card .qr-wrap.mini {
+  width: min(100%, 256px);
   margin-inline: auto;
 }
 
@@ -545,6 +546,7 @@ input {
 }
 
 .postgame-thought-qr-wrap {
+  width: min(100%, 256px);
   margin-inline: auto;
 }
 
