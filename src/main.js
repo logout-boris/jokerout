@@ -5,6 +5,7 @@ import './style.css'
 const app = document.querySelector('#app')
 const SUPABASE_URL = 'https://hezvtqurbxaxmvcrmuuu.supabase.co'
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_QkiVaVk0SKwT4CrF0PF4aA_DjvdGbTi'
+const ADMIN_RESET_PIN = '3030'
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
 
 const STORAGE = {
@@ -459,7 +460,7 @@ function getEventTop20() {
 function pushEventTopEntry(entry) {
   const rows = getEventTop20()
   rows.push(entry)
-  rows.sort((a, b) => b.points - a.points || a.reactionMs - b.reactionMs)
+  rows.sort((a, b) => b.points - a.points || (b.capturedAt || 0) - (a.capturedAt || 0))
   saveJSON(STORAGE.eventTop20, rows.slice(0, 20))
 }
 
@@ -474,12 +475,17 @@ function renderKioskEventPanel() {
 
   const rows = getEventTop20()
   if (!rows.length) {
-    topEl.innerHTML = '<li><span class="muted">Se ni rezultatov.</span><strong>-</strong><em>-</em></li>'
+    topEl.innerHTML = '<li><span class="muted">Se ni rezultatov.</span><strong>-</strong></li>'
     return
   }
   topEl.innerHTML = rows
-    .map((row) => `<li><span>${row.playerName || 'Anon'}</span><strong>${row.points} pts</strong><em>${formatReactionTime(row.reactionMs)}</em></li>`)
+    .map((row) => `<li><span>${row.playerName || 'Anon'}</span><strong>${row.points} pts</strong></li>`)
     .join('')
+}
+
+function resetEventData() {
+  saveEventStats({ gamesPlayed: 0, participants: [] })
+  saveJSON(STORAGE.eventTop20, [])
 }
 
 function encodePayload(data) {
@@ -623,6 +629,11 @@ async function renderSoloKiosk() {
             <input id="qr-base-url" value="${baseUrl}" placeholder="http://192.168.x.x:5173" />
             <button id="save-base-url" class="btn">Shrani URL</button>
           </div>
+          <div class="inline-form reset-row">
+            <label for="admin-pin">Reset PIN</label>
+            <input id="admin-pin" type="password" inputmode="numeric" maxlength="8" placeholder="PIN" />
+            <button id="reset-event" class="btn danger">Reset event</button>
+          </div>
           <p class="small">Kiosk mora biti odprt na istem URL, ki je nastavljen tukaj.</p>
         </details>
         <p class="countdown" id="countdown"></p>
@@ -677,6 +688,19 @@ async function renderSoloKiosk() {
     }
     if (meta) meta.textContent = 'QR Base URL shranjen.'
     await renderStarterQr()
+  })
+  document.querySelector('#reset-event')?.addEventListener('click', () => {
+    const pinInput = document.querySelector('#admin-pin')
+    const meta = document.querySelector('#meta')
+    const pin = String(pinInput?.value || '').trim()
+    if (pin !== ADMIN_RESET_PIN) {
+      if (meta) meta.textContent = 'Napacen PIN za reset.'
+      return
+    }
+    resetEventData()
+    renderKioskEventPanel()
+    if (pinInput) pinInput.value = ''
+    if (meta) meta.textContent = 'Event statistika in Top 20 sta ponastavljena.'
   })
   await renderStarterQr()
   try {

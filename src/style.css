@@ -132,6 +132,11 @@ code {
   border-color: #3b82f6;
 }
 
+.btn.danger {
+  background: #7f1d1d;
+  border-color: #ef4444;
+}
+
 input,
 select {
   background: #0f172a;
@@ -217,6 +222,10 @@ input {
 
 .settings-toggle[open] summary {
   margin-bottom: 8px;
+}
+
+.reset-row {
+  margin-top: 10px;
 }
 
 .starter-card.restart-highlight {
@@ -571,6 +580,10 @@ input {
   grid-template-columns: 1fr auto auto;
   gap: 8px;
   align-items: center;
+}
+
+.event-board li {
+  grid-template-columns: 1fr auto;
 }
 
 .board strong {
