@@ -26,10 +26,18 @@ body {
 .kiosk-app {
   max-width: 100%;
   width: 100%;
+  margin: 0;
+  padding-inline: clamp(10px, 2vw, 22px);
 }
 
 .kiosk-page {
   min-height: calc(100vh - 32px);
+  width: 100%;
+}
+
+.kiosk-page > .card {
+  width: 100%;
+  max-width: none;
 }
 
 .row-actions {
@@ -270,6 +278,14 @@ input {
     0 0 0 2px rgba(250, 204, 21, 0.4),
     0 0 18px rgba(250, 204, 21, 0.5);
   animation: restartPulse 1s steps(2) infinite;
+}
+
+.starter-card {
+  text-align: center;
+}
+
+.starter-card .qr-wrap.mini {
+  margin-inline: auto;
 }
 
 .join-code {
