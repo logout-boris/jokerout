@@ -318,6 +318,11 @@ function finishSoloGame() {
   playBeep({ freq: 180, durationMs: 300, volume: 0.07, type: 'sawtooth' })
   const hint = document.querySelector('#hint')
   if (hint) hint.textContent = 'GAME OVER. Za novo igro naj igralec skenira zacetni QR.'
+  const starter = document.querySelector('#starter-card')
+  if (starter) {
+    starter.classList.remove('hidden')
+    starter.classList.add('restart-highlight')
+  }
   const gameOver = document.querySelector('#gameover-banner')
   if (gameOver) {
     gameOver.classList.remove('hidden')
@@ -344,7 +349,10 @@ function startSoloGame() {
     result.innerHTML = ''
   }
   const starter = document.querySelector('#starter-card')
-  if (starter) starter.classList.add('hidden')
+  if (starter) {
+    starter.classList.add('hidden')
+    starter.classList.remove('restart-highlight')
+  }
   const gameOver = document.querySelector('#gameover-banner')
   if (gameOver) {
     gameOver.classList.add('hidden')
