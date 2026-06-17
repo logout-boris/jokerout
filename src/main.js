@@ -7,7 +7,7 @@ const app = document.querySelector('#app')
 const SUPABASE_URL = 'https://hezvtqurbxaxmvcrmuuu.supabase.co'
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_QkiVaVk0SKwT4CrF0PF4aA_DjvdGbTi'
 const ADMIN_RESET_PIN = '3030'
-const GLOBAL_CHANNEL_NAME = 'qr-rush-global'
+const GLOBAL_CHANNEL_NAME = 'lovilec-pozornosti-global'
 const LOGOUT_STAND_INVITE = 'Pridi na logout.org stojnico - cakamo te!'
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
 
@@ -942,7 +942,7 @@ function createPostGameShareImage({ playerName = 'Anon', catches = 0, motivation
   return canvas.toDataURL('image/png')
 }
 
-async function dataUrlToFile(dataUrl, filename = 'qr-rush-share.png') {
+async function dataUrlToFile(dataUrl, filename = 'lovilec-pozornosti-share.png') {
   const response = await fetch(dataUrl)
   const blob = await response.blob()
   return new File([blob], filename, { type: blob.type || 'image/png' })
@@ -1848,13 +1848,13 @@ function renderPlayer() {
     if (!postGameShareImage) return
     const link = document.createElement('a')
     link.href = postGameShareImage
-    link.download = `qr-rush-${Date.now()}.png`
+    link.download = `lovilec-pozornosti-${Date.now()}.png`
     link.click()
   })
   document.querySelector('#share-postgame-image')?.addEventListener('click', async () => {
     if (!postGameShareImage) return
     try {
-      const file = await dataUrlToFile(postGameShareImage, `qr-rush-${Date.now()}.png`)
+      const file = await dataUrlToFile(postGameShareImage, `lovilec-pozornosti-${Date.now()}.png`)
       if (navigator.share && navigator.canShare?.({ files: [file] })) {
         await navigator.share({
           title: 'Lovilec pozornosti x logout.org',
