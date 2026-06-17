@@ -135,6 +135,8 @@ let soloRoundExpiryTimer = null
 let soloNextRoundTimer = null
 let soloGameOverRevealTimer = null
 let soloPostGameStarterTimer = null
+let soloPostGameAutoRestartTimer = null
+let soloPostGamePhase = ''
 let soloObstacleTimer = null
 let soloSkinIndex = 0
 let kioskSessionId = ''
@@ -302,7 +304,18 @@ async function setupGlobalRealtime() {
     const thought = payload?.thought
     if (!thought?.id || !thought?.text) return
     pushAttentionThought(thought)
-    if (parseRoute().path === '/solo-kiosk') renderAttentionTicker()
+    const path = parseRoute().path
+    if (path === '/solo-kiosk') {
+      renderAttentionTicker()
+      if (!soloGameState.active && soloPostGamePhase === 'invite') {
+        const hint = document.querySelector('#hint')
+        if (hint) hint.textContent = 'Hvala za deljeno misel. Resetiram kiosk ...'
+        if (soloPostGameAutoRestartTimer) clearTimeout(soloPostGameAutoRestartTimer)
+        soloPostGameAutoRestartTimer = setTimeout(() => {
+          showSoloRestartStarter()
+        }, 1400)
+      }
+    }
   })
   await waitForChannelSubscribed(channel)
   globalRealtimeChannel = channel
@@ -515,6 +528,11 @@ function clearSoloTimers() {
     clearTimeout(soloPostGameStarterTimer)
     soloPostGameStarterTimer = null
   }
+  if (soloPostGameAutoRestartTimer) {
+    clearTimeout(soloPostGameAutoRestartTimer)
+    soloPostGameAutoRestartTimer = null
+  }
+  soloPostGamePhase = ''
   if (kioskStartDelayTimer) {
     clearTimeout(kioskStartDelayTimer)
     kioskStartDelayTimer = null
@@ -545,7 +563,7 @@ function updateSoloHud() {
   if (catchesEl) catchesEl.textContent = `${soloGameState.catches}`
 }
 
-function renderSoloGameOver(summary = null) {
+function renderSoloGameOver(summary = null, phase = 'result') {
   const panel = document.querySelector('#solo-result')
   if (!panel) return
   if (!summary) {
@@ -555,24 +573,47 @@ function renderSoloGameOver(summary = null) {
   }
   const avgLabel = summary.avgReactionMs > 0 ? formatReactionTime(summary.avgReactionMs) : 'n/a'
   const totalLabel = formatReactionTime(summary.totalPlayMs || 0)
-  panel.innerHTML = `
-    <h3>${summary.completedAllLevels ? 'Konec igre - odlicno!' : 'Game over'}</h3>
-    <p>Ujel si <strong>${summary.catches}</strong> skratov.</p>
-    <div class="focus-metrics kiosk-focus-metrics">
-      <p><strong>Povprecni odziv:</strong> ${avgLabel}</p>
-      <p><strong>Skupni cas igre:</strong> ${totalLabel}</p>
-    </div>
-    <p class="science-line"><strong>Znanstveni vpogled:</strong> ${escapeHtml(summary.scienceInsight || randomScienceInsight())}</p>
-    <p class="small">Postani delilec pozornosti: skeniraj QR in dodaj lepo misel.</p>
-    ${summary.shareThoughtQr
-      ? `<div class="qr-wrap mini postgame-thought-qr-wrap"><img id="postgame-thought-qr" src="${summary.shareThoughtQr}" alt="QR za delilca pozornosti" /></div>`
-      : `<p class="small thought-fallback-link"><a href="${escapeHtml(summary.shareThoughtUrl || '#')}" target="_blank" rel="noopener noreferrer">Odpri obrazec za deljenje misli</a></p>`}
-  `
+  if (phase === 'invite') {
+    panel.innerHTML = `
+      <h3>Povabilo: postani delilec pozornosti</h3>
+      <p class="small">Skeniraj QR in dodaj lepo misel. Ta korak traja do 1 minute.</p>
+      ${summary.shareThoughtQr
+        ? `<div class="qr-wrap mini postgame-thought-qr-wrap"><img id="postgame-thought-qr" src="${summary.shareThoughtQr}" alt="QR za delilca pozornosti" /></div>`
+        : `<p class="small thought-fallback-link"><a href="${escapeHtml(summary.shareThoughtUrl || '#')}" target="_blank" rel="noopener noreferrer">Odpri obrazec za deljenje misli</a></p>`}
+      <p class="small">${escapeHtml(summary.invite || LOGOUT_STAND_INVITE)}</p>
+    `
+  } else {
+    panel.innerHTML = `
+      <h3>${summary.completedAllLevels ? 'Konec igre - odlicno!' : 'Game over'}</h3>
+      <p>Ujel si <strong>${summary.catches}</strong> skratov.</p>
+      <div class="focus-metrics kiosk-focus-metrics">
+        <p><strong>Povprecni odziv:</strong> ${avgLabel}</p>
+        <p><strong>Skupni cas igre:</strong> ${totalLabel}</p>
+      </div>
+      <p class="science-line"><strong>Znanstveni vpogled:</strong> ${escapeHtml(summary.scienceInsight || randomScienceInsight())}</p>
+      <p class="small">${escapeHtml(summary.resultMessage || '')}</p>
+    `
+  }
   panel.classList.remove('hidden')
   const hint = document.querySelector('#hint')
   if (hint) {
-    hint.textContent = 'Skeniraj poseben QR za lepo misel ali zacetni QR za novo igro.'
+    hint.textContent = phase === 'invite'
+      ? 'Povabilo je aktivno 1 minuto. Nato se kiosk sam resetira.'
+      : 'Rezultat prikazan. Povabilo z QR sledi cez 6 sekund.'
   }
+}
+
+function showSoloRestartStarter() {
+  const resultPanel = document.querySelector('#solo-result')
+  if (resultPanel) {
+    resultPanel.classList.add('hidden')
+    resultPanel.innerHTML = ''
+  }
+  const restartStarter = document.querySelector('#starter-card')
+  if (restartStarter) restartStarter.classList.remove('hidden')
+  const restartHint = document.querySelector('#hint')
+  if (restartHint) restartHint.textContent = 'Za novo igro naj igralec skenira zacetni QR.'
+  soloPostGamePhase = ''
 }
 
 function finishSoloGame(reason = 'gameover') {
@@ -589,7 +630,7 @@ function finishSoloGame(reason = 'gameover') {
   const theme = MESSAGE_THEMES[getActiveThemeKey()]
   const motivationCore = randomThemeMessage(theme.prevention, 'Odklopi obvestila in uzivaj koncert.')
   const recipe = randomDigitalRecipe()
-  const motivation = `logout.org: Ujel si ${catches} skratov, ki jemljejo pozornost. ${motivationCore} ${LOGOUT_STAND_INVITE}`
+  const motivation = `logout.org: Ujel si ${catches} skratov, ki jemljejo pozornost. ${motivationCore}`
   const shareThoughtUrl = `${getQrBaseUrl()}#/attention-share?session=${encodeURIComponent(kioskSessionId || '')}`
   soloGameState.active = false
   if (soloGameState.currentScore > 0) {
@@ -667,31 +708,32 @@ function finishSoloGame(reason = 'gameover') {
       completedAllLevels,
       shareThoughtQr: '',
       shareThoughtUrl,
+      invite: LOGOUT_STAND_INVITE,
+      resultMessage: motivation,
     }
-    QRCode.toDataURL(shareThoughtUrl, { errorCorrectionLevel: 'M', margin: 1, width: 260 })
-      .then((qrData) => {
-        renderSoloGameOver({
-          ...postGameSummary,
-          shareThoughtQr: qrData,
-        })
-      })
-      .catch(() => {
-        renderSoloGameOver(postGameSummary)
-      })
+    soloPostGamePhase = 'result'
+    renderSoloGameOver(postGameSummary, 'result')
     const lateHint = document.querySelector('#hint')
     if (lateHint) lateHint.textContent = 'Konec igre ...'
     if (soloPostGameStarterTimer) clearTimeout(soloPostGameStarterTimer)
     soloPostGameStarterTimer = setTimeout(() => {
-      const resultPanel = document.querySelector('#solo-result')
-      if (resultPanel) {
-        resultPanel.classList.add('hidden')
-        resultPanel.innerHTML = ''
-      }
-      const restartStarter = document.querySelector('#starter-card')
-      if (restartStarter) restartStarter.classList.remove('hidden')
-      const restartHint = document.querySelector('#hint')
-      if (restartHint) restartHint.textContent = 'Za novo igro naj igralec skenira zacetni QR.'
-    }, 6500)
+      QRCode.toDataURL(shareThoughtUrl, { errorCorrectionLevel: 'M', margin: 1, width: 260 })
+        .then((qrData) => {
+          soloPostGamePhase = 'invite'
+          renderSoloGameOver({
+            ...postGameSummary,
+            shareThoughtQr: qrData,
+          }, 'invite')
+        })
+        .catch(() => {
+          soloPostGamePhase = 'invite'
+          renderSoloGameOver(postGameSummary, 'invite')
+        })
+      if (soloPostGameAutoRestartTimer) clearTimeout(soloPostGameAutoRestartTimer)
+      soloPostGameAutoRestartTimer = setTimeout(() => {
+        showSoloRestartStarter()
+      }, 60000)
+    }, 6000)
   }, 1300)
 }
 
