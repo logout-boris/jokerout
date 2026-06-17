@@ -613,39 +613,40 @@ input {
 }
 
 .monster-frame::before {
-  content: '';
+  content: ' /\\_/\\\A( o.o )\A/|_|_\\';
   position: absolute;
-  inset: -12px;
-  z-index: 1;
+  top: -52px;
+  left: 50%;
+  z-index: 4;
+  transform: translateX(-50%);
   pointer-events: none;
-  background:
-    linear-gradient(var(--monster-accent), var(--monster-accent)) left top / 20px 8px no-repeat,
-    linear-gradient(var(--monster-accent), var(--monster-accent)) right top / 20px 8px no-repeat,
-    linear-gradient(var(--monster-accent), var(--monster-accent)) left bottom / 20px 8px no-repeat,
-    linear-gradient(var(--monster-accent), var(--monster-accent)) right bottom / 20px 8px no-repeat,
-    linear-gradient(var(--monster-accent), var(--monster-accent)) left top / 8px 20px no-repeat,
-    linear-gradient(var(--monster-accent), var(--monster-accent)) right top / 8px 20px no-repeat,
-    linear-gradient(var(--monster-accent), var(--monster-accent)) left bottom / 8px 20px no-repeat,
-    linear-gradient(var(--monster-accent), var(--monster-accent)) right bottom / 8px 20px no-repeat;
-  filter: drop-shadow(0 0 8px color-mix(in srgb, var(--monster-accent) 55%, transparent));
+  white-space: pre;
+  font-family: Consolas, Menlo, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.05;
+  color: color-mix(in srgb, var(--monster-accent) 80%, #d9f99d);
+  text-shadow:
+    0 0 8px color-mix(in srgb, var(--monster-accent) 55%, transparent),
+    0 0 2px rgba(0, 0, 0, 0.9);
   animation: pixelBlink 1s steps(2) infinite;
 }
 
 .monster-frame::after {
-  content: '';
+  content: 'ᗢ  ᗢ  ᗢ';
   position: absolute;
-  top: -12px;
-  right: 14px;
+  bottom: -22px;
+  left: 50%;
   z-index: 3;
-  width: 26px;
-  height: 10px;
-  background:
-    linear-gradient(var(--monster-accent), var(--monster-accent)) 0 0 / 8px 8px no-repeat,
-    linear-gradient(var(--monster-accent), var(--monster-accent)) right 0 / 8px 8px no-repeat;
-  box-shadow:
-    0 0 10px color-mix(in srgb, var(--monster-accent) 65%, transparent),
-    0 0 0 4px rgba(2, 6, 23, 0.9);
-  border-radius: 2px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  font-family: Consolas, Menlo, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--monster-accent) 82%, #bef264);
+  text-shadow:
+    0 0 8px color-mix(in srgb, var(--monster-accent) 60%, transparent),
+    0 0 2px rgba(0, 0, 0, 0.9);
 }
 
 #solo-qr-node[data-skin='0'] {
