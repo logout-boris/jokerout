@@ -20,6 +20,7 @@ const STORAGE = {
   messageTheme: 'joqr.kiosk.messageTheme',
   activeSessionId: 'joqr.player.activeSessionId',
   lastGameOverSummary: 'joqr.player.lastGameOverSummary',
+  attentionThoughts: 'joqr.shared.attentionThoughts',
 }
 
 const DIFFICULTIES = {
@@ -297,6 +298,12 @@ async function setupGlobalRealtime() {
     if (path === '/solo-kiosk') renderKioskEventPanel()
     if (path === '/player') renderPlayer()
   })
+  channel.on('broadcast', { event: 'attention_thought' }, ({ payload }) => {
+    const thought = payload?.thought
+    if (!thought?.id || !thought?.text) return
+    pushAttentionThought(thought)
+    if (parseRoute().path === '/solo-kiosk') renderAttentionTicker()
+  })
   await waitForChannelSubscribed(channel)
   globalRealtimeChannel = channel
 }
@@ -538,15 +545,33 @@ function updateSoloHud() {
   if (catchesEl) catchesEl.textContent = `${soloGameState.catches}`
 }
 
-function renderSoloGameOver() {
+function renderSoloGameOver(summary = null) {
   const panel = document.querySelector('#solo-result')
-  if (panel) {
+  if (!panel) return
+  if (!summary) {
     panel.classList.add('hidden')
     panel.innerHTML = ''
+    return
   }
+  const avgLabel = summary.avgReactionMs > 0 ? formatReactionTime(summary.avgReactionMs) : 'n/a'
+  const totalLabel = formatReactionTime(summary.totalPlayMs || 0)
+  panel.innerHTML = `
+    <h3>${summary.completedAllLevels ? 'Konec igre - odlicno!' : 'Game over'}</h3>
+    <p>Ujel si <strong>${summary.catches}</strong> skratov.</p>
+    <div class="focus-metrics kiosk-focus-metrics">
+      <p><strong>Povprecni odziv:</strong> ${avgLabel}</p>
+      <p><strong>Skupni cas igre:</strong> ${totalLabel}</p>
+    </div>
+    <p class="science-line"><strong>Znanstveni vpogled:</strong> ${escapeHtml(summary.scienceInsight || randomScienceInsight())}</p>
+    <p class="small">Postani delilec pozornosti: skeniraj QR in dodaj lepo misel.</p>
+    <div class="qr-wrap mini postgame-thought-qr-wrap"><img id="postgame-thought-qr" alt="QR za delilca pozornosti" /></div>
+  `
+  panel.classList.remove('hidden')
+  const qrImg = panel.querySelector('#postgame-thought-qr')
+  if (qrImg && summary.shareThoughtQr) qrImg.src = summary.shareThoughtQr
   const hint = document.querySelector('#hint')
   if (hint) {
-    hint.textContent = `Konec igre. Ulovi: ${soloGameState.catches} | Level: ${Math.max(1, soloGameState.level - 1)}`
+    hint.textContent = 'Skeniraj poseben QR za lepo misel ali zacetni QR za novo igro.'
   }
 }
 
@@ -565,6 +590,7 @@ function finishSoloGame(reason = 'gameover') {
   const motivationCore = randomThemeMessage(theme.prevention, 'Odklopi obvestila in uzivaj koncert.')
   const recipe = randomDigitalRecipe()
   const motivation = `logout.org: Ujel si ${catches} skratov, ki jemljejo pozornost. ${motivationCore} ${LOGOUT_STAND_INVITE}`
+  const shareThoughtUrl = `${getQrBaseUrl()}#/attention-share?session=${encodeURIComponent(kioskSessionId || '')}`
   soloGameState.active = false
   if (soloGameState.currentScore > 0) {
     pushEventTopEntry({
@@ -633,7 +659,22 @@ function finishSoloGame(reason = 'gameover') {
     }
     const lateStarter = document.querySelector('#starter-card')
     if (lateStarter) lateStarter.classList.add('hidden')
-    renderSoloGameOver()
+    renderSoloGameOver({
+      catches,
+      avgReactionMs,
+      totalPlayMs,
+      scienceInsight,
+      completedAllLevels,
+      shareThoughtQr: '',
+    })
+    QRCode.toDataURL(shareThoughtUrl, { errorCorrectionLevel: 'M', margin: 1, width: 260 })
+      .then((qrData) => {
+        const qrImg = document.querySelector('#postgame-thought-qr')
+        if (qrImg) qrImg.src = qrData
+      })
+      .catch(() => {
+        // Ignore QR generation errors for the optional thought flow.
+      })
     const lateHint = document.querySelector('#hint')
     if (lateHint) lateHint.textContent = 'Konec igre ...'
     if (soloPostGameStarterTimer) clearTimeout(soloPostGameStarterTimer)
@@ -790,9 +831,70 @@ function renderKioskEventPanel() {
   participantsEl.textContent = `${stats.participants.length}`
 }
 
+function escapeHtml(value = '') {
+  return String(value || '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+}
+
+function normalizeThoughtText(value = '') {
+  return String(value || '').replace(/\s+/g, ' ').trim().slice(0, 180)
+}
+
+function getAttentionThoughts() {
+  const rows = readJSON(STORAGE.attentionThoughts, [])
+  return Array.isArray(rows) ? rows : []
+}
+
+function pushAttentionThought(thought) {
+  if (!thought?.id || !thought?.text) return
+  const rows = getAttentionThoughts()
+  if (rows.some((row) => row.id === thought.id)) return
+  rows.push({
+    id: String(thought.id),
+    text: normalizeThoughtText(thought.text),
+    author: String(thought.author || 'Anon').trim().slice(0, 24),
+    createdAt: Number(thought.createdAt) || Date.now(),
+  })
+  rows.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))
+  saveJSON(STORAGE.attentionThoughts, rows.slice(-24))
+}
+
+function renderAttentionTicker() {
+  const mount = document.querySelector('#attention-thoughts-track')
+  if (!mount) return
+  const thoughts = getAttentionThoughts()
+  const items = thoughts.length > 0
+    ? thoughts.slice(-10).map((row) => `"${escapeHtml(row.text)}" - ${escapeHtml(row.author || 'Anon')}`)
+    : ['Dodaj svojo lepo misel in postani delilec pozornosti.']
+  const line = items.join('   |   ')
+  mount.innerHTML = `<span>${line}</span><span>${line}</span>`
+}
+
+async function saveAttentionThought(thought) {
+  pushAttentionThought(thought)
+  sendGlobalEvent('attention_thought', { thought }).catch(() => {
+    // Sharing thought should not fail because realtime send fails.
+  })
+  try {
+    await supabase.from('attention_thoughts').insert({
+      thought_id: thought.id,
+      text: thought.text,
+      author: thought.author,
+      created_at: new Date(thought.createdAt).toISOString(),
+    })
+  } catch {
+    // Optional DB persistence can fail (missing table/policy); realtime still shares it.
+  }
+}
+
 function resetEventData() {
   saveEventStats({ gamesPlayed: 0, participants: [] })
   saveJSON(STORAGE.eventTop20, [])
+  saveJSON(STORAGE.attentionThoughts, [])
 }
 
 function encodePayload(data) {
@@ -1076,6 +1178,12 @@ async function renderSoloKiosk() {
         </details>
         <p id="prevention-message" class="prevention-message"></p>
         <p class="small" id="hint"></p>
+        <section class="attention-ticker-wrap">
+          <p class="small attention-ticker-title">Zadnje lepe misli delilcev pozornosti</p>
+          <div class="attention-ticker">
+            <div id="attention-thoughts-track" class="attention-thoughts-track"></div>
+          </div>
+        </section>
       </section>
     </main>
   `
@@ -1135,6 +1243,7 @@ async function renderSoloKiosk() {
     }
     resetEventData()
     renderKioskEventPanel()
+    renderAttentionTicker()
     if (pinInput) pinInput.value = ''
     if (meta) meta.textContent = 'Event statistika je ponastavljena.'
   })
@@ -1152,6 +1261,7 @@ async function renderSoloKiosk() {
   }
   updateSoloHud()
   renderKioskEventPanel()
+  renderAttentionTicker()
   kioskIdleIntroCount = 0
   ensureKioskStarterVisible()
   await playKioskIntro()
@@ -2128,6 +2238,58 @@ function renderJoin(params) {
   })
 }
 
+function renderAttentionShare(params) {
+  const profile = getPlayerProfile()
+  const sessionId = String(params.get('session') || '').trim()
+  app.innerHTML = `
+    <main class="page">
+      <section class="card">
+        <h1>Postani delilec pozornosti</h1>
+        <p class="small">Vnesi lepo misel, ki bo tekla po kiosku in navdihnila druge mlade.</p>
+        <form id="attention-share-form" class="focus-survey">
+          <label>Tvoje ime (neobvezno)
+            <input id="attention-name" type="text" maxlength="24" value="${escapeHtml(profile.name || '')}" placeholder="npr. Maja" />
+          </label>
+          <label>Lepa misel (max 180 znakov)
+            <textarea id="attention-text" maxlength="180" rows="4" placeholder="Primer: Najvecji flex je, da zivis trenutek in ne feeda." required></textarea>
+          </label>
+          <div class="actions">
+            <button type="submit" class="btn primary">Objavi misel</button>
+            <button id="attention-go-player" type="button" class="btn">Moji rezultati</button>
+          </div>
+          <p id="attention-status" class="small muted"></p>
+          <p class="small muted">Session: <code>${escapeHtml(sessionId || 'n/a')}</code></p>
+        </form>
+      </section>
+    </main>
+  `
+  document.querySelector('#attention-go-player')?.addEventListener('click', () => navigate('/player'))
+  document.querySelector('#attention-share-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault()
+    const status = document.querySelector('#attention-status')
+    const nameInput = document.querySelector('#attention-name')
+    const textInput = document.querySelector('#attention-text')
+    const author = String(nameInput?.value || profile.name || 'Anon').trim().slice(0, 24)
+    const text = normalizeThoughtText(textInput?.value || '')
+    if (!text) {
+      if (status) status.textContent = 'Prosim, vpisi misel.'
+      return
+    }
+    const thought = {
+      id: crypto.randomUUID ? crypto.randomUUID() : `thought-${Date.now()}-${Math.random().toString(16).slice(2, 7)}`,
+      text,
+      author: author || 'Anon',
+      playerId: profile.id,
+      sessionId,
+      createdAt: Date.now(),
+    }
+    if (status) status.textContent = 'Objavljam ...'
+    await saveAttentionThought(thought)
+    if (status) status.textContent = 'Hvala! Tvoja misel zdaj tece na kiosku.'
+    setTimeout(() => navigate('/player'), 1100)
+  })
+}
+
 function render() {
   const { path, params } = parseRoute()
   const blockKioskForPhone = isPhonePlayerDevice() && ['/', '/solo-kiosk', '/duel-kiosk'].includes(path)
@@ -2176,6 +2338,13 @@ function render() {
       })
     }
     renderPlayer()
+    return
+  }
+  if (path === '/attention-share') {
+    setupGlobalRealtime().catch(() => {
+      // Share page still works with local fallback.
+    })
+    renderAttentionShare(params)
     return
   }
   renderHome()
