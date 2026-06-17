@@ -132,6 +132,8 @@ let audioCtx = null
 let audioUnlockBound = false
 let kioskLeaderboardTimer = null
 let kioskStartDelayTimer = null
+let kioskIdleIntroTimer = null
+let kioskIntroRunning = false
 let activePhoneScanner = null
 let playerSessionRealtimeChannel = null
 let activePlayerSessionId = ''
@@ -527,6 +529,11 @@ function clearSoloTimers() {
     clearTimeout(kioskLeaderboardTimer)
     kioskLeaderboardTimer = null
   }
+  if (kioskIdleIntroTimer) {
+    clearInterval(kioskIdleIntroTimer)
+    kioskIdleIntroTimer = null
+  }
+  kioskIntroRunning = false
 }
 
 function updateSoloHud() {
@@ -1148,22 +1155,40 @@ async function renderSoloKiosk() {
   updateSoloHud()
   renderKioskEventPanel()
   await playKioskIntro()
+  startKioskIdleIntroLoop()
   showKioskLeaderboardTemporarily(3000)
 }
 
 async function playKioskIntro() {
+  if (kioskIntroRunning) return
+  if (soloGameState.active) return
   const overlay = document.querySelector('#kiosk-intro')
   if (!overlay) return
+  kioskIntroRunning = true
   const starter = document.querySelector('#starter-card')
   const hint = document.querySelector('#hint')
   overlay.classList.remove('hidden')
   if (starter) starter.classList.add('hidden')
   if (hint) hint.textContent = 'Skrati prihajajo ...'
   await sleep(2400)
-  if (parseRoute().path !== '/solo-kiosk') return
+  if (parseRoute().path !== '/solo-kiosk') {
+    kioskIntroRunning = false
+    return
+  }
   overlay.classList.add('hidden')
   if (!soloGameState.active && starter) starter.classList.remove('hidden')
   if (!soloGameState.active && hint) hint.textContent = 'Skeniraj zacetni QR za start igre.'
+  kioskIntroRunning = false
+}
+
+function startKioskIdleIntroLoop() {
+  if (kioskIdleIntroTimer) return
+  kioskIdleIntroTimer = setInterval(() => {
+    if (parseRoute().path !== '/solo-kiosk') return
+    if (soloGameState.active) return
+    if (kioskIntroRunning) return
+    playKioskIntro()
+  }, 60000)
 }
 
 async function renderStarterQr() {
