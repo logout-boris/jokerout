@@ -114,6 +114,7 @@ let soloRoundExpiryTimer = null
 let soloNextRoundTimer = null
 let soloGameOverRevealTimer = null
 let soloPostGameStarterTimer = null
+let soloObstacleTimer = null
 let soloSkinIndex = 0
 let kioskSessionId = ''
 let kioskRealtimeChannel = null
@@ -408,6 +409,7 @@ async function toggleFullscreen() {
 
 function clearSoloTimers() {
   stopSoloMovement()
+  stopSoloObstacles()
   if (soloRoundExpiryTimer) {
     clearTimeout(soloRoundExpiryTimer)
     soloRoundExpiryTimer = null
@@ -956,6 +958,14 @@ function stopSoloMovement() {
   }
 }
 
+function stopSoloObstacles() {
+  if (soloObstacleTimer) {
+    clearInterval(soloObstacleTimer)
+    soloObstacleTimer = null
+  }
+  document.querySelectorAll('.solo-dwarf-obstacle').forEach((node) => node.remove())
+}
+
 function startSoloMovement(level = 1) {
   stopSoloMovement()
   const stage = document.querySelector('#kiosk-main-stage') || document.querySelector('#solo-stage')
@@ -991,6 +1001,54 @@ function startSoloMovement(level = 1) {
   }, 20)
 }
 
+function startSoloObstacles(level = 1) {
+  stopSoloObstacles()
+  if (level < 3) return
+  const stage = document.querySelector('#kiosk-main-stage') || document.querySelector('#solo-stage')
+  if (!stage) return
+
+  const dwarfCount = Math.max(1, Math.min(6, level - 1))
+  const obstacles = Array.from({ length: dwarfCount }, (_, idx) => {
+    const node = document.createElement('div')
+    node.className = 'solo-dwarf-obstacle'
+    node.textContent = idx % 2 === 0 ? 'ᗢ' : '✦ᗢ✦'
+    stage.appendChild(node)
+    const x = 40 + idx * 46
+    const y = 30 + idx * 28
+    const baseSpeed = 1.25 + level * 0.28
+    const dirX = idx % 2 === 0 ? 1 : -1
+    const dirY = idx % 3 === 0 ? -1 : 1
+    return {
+      node,
+      x,
+      y,
+      vx: baseSpeed * dirX,
+      vy: (baseSpeed * 0.85) * dirY,
+    }
+  })
+
+  soloObstacleTimer = setInterval(() => {
+    const stageRect = stage.getBoundingClientRect()
+    obstacles.forEach((obstacle) => {
+      const nodeRect = obstacle.node.getBoundingClientRect()
+      const maxX = Math.max(0, stageRect.width - nodeRect.width)
+      const maxY = Math.max(0, stageRect.height - nodeRect.height)
+      obstacle.x += obstacle.vx
+      obstacle.y += obstacle.vy
+      if (obstacle.x <= 0 || obstacle.x >= maxX) {
+        obstacle.vx *= -1
+        obstacle.x = Math.max(0, Math.min(obstacle.x, maxX))
+      }
+      if (obstacle.y <= 0 || obstacle.y >= maxY) {
+        obstacle.vy *= -1
+        obstacle.y = Math.max(0, Math.min(obstacle.y, maxY))
+      }
+      obstacle.node.style.left = `${Math.round(obstacle.x)}px`
+      obstacle.node.style.top = `${Math.round(obstacle.y)}px`
+    })
+  }, 26)
+}
+
 function applySoloQrVisual() {
   const qr = document.querySelector('#solo-qr')
   const qrNode = document.querySelector('#solo-qr-node')
@@ -1021,6 +1079,7 @@ async function startSoloRound() {
   if (qr) qr.removeAttribute('src')
   if (qrNode) qrNode.classList.add('hidden')
   stopSoloMovement()
+  stopSoloObstacles()
   if (hint) hint.textContent = 'Pripravi telefon...'
   for (let left = 3; left >= 1; left -= 1) {
     if (runId !== soloRunNonce) return
@@ -1085,6 +1144,7 @@ async function generateSoloToken(runId) {
   if (asciiEl) asciiEl.textContent = ''
   applySoloQrVisual()
   startSoloMovement(soloGameState.level)
+  startSoloObstacles(soloGameState.level)
   updateSoloHud()
 
   if (soloRoundExpiryTimer) clearTimeout(soloRoundExpiryTimer)
@@ -1110,6 +1170,7 @@ function confirmSoloCatch() {
     clearTimeout(soloRoundExpiryTimer)
     soloRoundExpiryTimer = null
   }
+  stopSoloObstacles()
   soloGameState.catches += 1
   const completedAllLevels = soloGameState.level >= SOLO_MAX_LEVELS
   if (!completedAllLevels) {
