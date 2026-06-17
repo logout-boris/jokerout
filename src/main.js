@@ -49,13 +49,12 @@ let soloVisualState = { size: 190, hue: 0 }
 let soloMoveTimer = null
 let soloRoundExpiryTimer = null
 let soloNextRoundTimer = null
-let soloGameTicker = null
 let soloSkinIndex = 0
 let soloGameState = {
   active: false,
-  durationMs: 30000,
-  endsAt: 0,
-  rounds: 0,
+  lives: 3,
+  level: 1,
+  catches: 0,
 }
 
 function getSoloRoundTtlMs(mode, roundIndex) {
@@ -144,18 +143,15 @@ function clearSoloTimers() {
     clearTimeout(soloNextRoundTimer)
     soloNextRoundTimer = null
   }
-  if (soloGameTicker) {
-    clearInterval(soloGameTicker)
-    soloGameTicker = null
-  }
 }
 
 function updateSoloHud() {
-  const timerEl = document.querySelector('#solo-timer')
-  const roundsEl = document.querySelector('#solo-rounds')
-  const remainMs = Math.max(0, soloGameState.endsAt - Date.now())
-  if (timerEl) timerEl.textContent = `${(remainMs / 1000).toFixed(1)} s`
-  if (roundsEl) roundsEl.textContent = `${soloGameState.rounds}`
+  const livesEl = document.querySelector('#solo-lives')
+  const levelEl = document.querySelector('#solo-level')
+  const catchesEl = document.querySelector('#solo-catches')
+  if (livesEl) livesEl.textContent = `${soloGameState.lives}`
+  if (levelEl) levelEl.textContent = `${soloGameState.level}`
+  if (catchesEl) catchesEl.textContent = `${soloGameState.catches}`
 }
 
 function renderSoloGameOver() {
@@ -164,8 +160,8 @@ function renderSoloGameOver() {
   panel.classList.remove('hidden')
   panel.innerHTML = `
     <h3>Game over</h3>
-    <p>Zakljucene runde: <strong>${soloGameState.rounds}</strong></p>
-    <p>Na telefonu vidis svoje osebne tocke in uspehe.</p>
+    <p>Uspesni ulovi: <strong>${soloGameState.catches}</strong></p>
+    <p>Dosezen level: <strong>${Math.max(1, soloGameState.level - 1)}</strong></p>
   `
 }
 
@@ -176,7 +172,7 @@ function finishSoloGame() {
   clearSoloTimers()
   updateSoloHud()
   const hint = document.querySelector('#hint')
-  if (hint) hint.textContent = 'Runda je koncana. Klikni "Start game 30s" za novo igro.'
+  if (hint) hint.textContent = 'GAME OVER. Klikni "Start game" za novo igro.'
   renderSoloGameOver()
 }
 
@@ -187,9 +183,9 @@ function startSoloGame() {
   soloVisualState = { size: 190, hue: 0 }
   soloGameState = {
     active: true,
-    durationMs: 30000,
-    endsAt: Date.now() + 30000,
-    rounds: 0,
+    lives: 3,
+    level: 1,
+    catches: 0,
   }
   const result = document.querySelector('#solo-result')
   if (result) {
@@ -197,13 +193,6 @@ function startSoloGame() {
     result.innerHTML = ''
   }
   updateSoloHud()
-  soloGameTicker = setInterval(() => {
-    if (!soloGameState.active) return
-    updateSoloHud()
-    if (Date.now() >= soloGameState.endsAt) {
-      finishSoloGame()
-    }
-  }, 100)
   startSoloRound()
 }
 
@@ -370,12 +359,13 @@ async function renderSoloKiosk() {
             <option value="hard">Hard</option>
             <option value="insane">Insane</option>
           </select>
-          <button id="start-game" class="btn primary">Start game 30s</button>
+          <button id="start-game" class="btn primary">Start game</button>
           <button id="start-round" class="btn">Nova runda</button>
         </div>
         <div class="hud">
-          <p>Cas: <strong id="solo-timer">0.0 s</strong></p>
-          <p>Runde: <strong id="solo-rounds">0</strong></p>
+          <p>Zivljenja: <strong id="solo-lives">3</strong></p>
+          <p>Level: <strong id="solo-level">1</strong></p>
+          <p>Ulovi: <strong id="solo-catches">0</strong></p>
         </div>
         <div class="inline-form">
           <label for="qr-base-url">QR Base URL</label>
@@ -391,6 +381,9 @@ async function renderSoloKiosk() {
           <div id="solo-qr-node" class="monster-frame hidden">
             <img id="solo-qr" alt="Solo round QR" />
           </div>
+        </div>
+        <div class="inline-form">
+          <button id="confirm-catch" class="btn primary">Ujeto! Naslednji level</button>
         </div>
         <p class="small" id="hint"></p>
         <section id="solo-result" class="card-sub hidden"></section>
@@ -417,6 +410,7 @@ async function renderSoloKiosk() {
   syncFullscreenLabel()
   document.querySelector('#start-game')?.addEventListener('click', () => startSoloGame())
   document.querySelector('#start-round')?.addEventListener('click', () => startSoloRound())
+  document.querySelector('#confirm-catch')?.addEventListener('click', () => confirmSoloCatch())
   document.querySelector('#save-base-url')?.addEventListener('click', async () => {
     const input = document.querySelector('#qr-base-url')
     const ok = setQrBaseUrl(input?.value || '')
@@ -493,10 +487,6 @@ function triggerSoloBurst() {
 }
 
 async function startSoloRound() {
-  if (soloGameState.active && Date.now() >= soloGameState.endsAt) {
-    finishSoloGame()
-    return
-  }
   const runId = ++soloRunNonce
   const countEl = document.querySelector('#countdown')
   const asciiEl = document.querySelector('#ascii-dwarf')
@@ -525,7 +515,7 @@ async function generateSoloToken(runId) {
   const mode = select?.value || 'normal'
   const config = DIFFICULTIES[mode] || DIFFICULTIES.normal
   const ttlMs = soloGameState.active
-    ? getSoloRoundTtlMs(mode, soloGameState.rounds)
+    ? getSoloRoundTtlMs(mode, Math.max(0, soloGameState.level - 1))
     : config.ttlMs
   const message = MESSAGES[Math.floor(Math.random() * MESSAGES.length)]
   const now = Date.now()
@@ -569,22 +559,47 @@ async function generateSoloToken(runId) {
   if (asciiEl) asciiEl.textContent = ''
   applySoloQrVisual()
   startSoloMovement()
-  if (soloGameState.active) {
-    soloGameState.rounds += 1
-    updateSoloHud()
-  }
+  updateSoloHud()
 
   if (soloRoundExpiryTimer) clearTimeout(soloRoundExpiryTimer)
   soloRoundExpiryTimer = setTimeout(() => {
     if (!currentSoloRound || currentSoloRound.tokenId !== tokenId) return
-    if (soloGameState.active && Date.now() >= soloGameState.endsAt) {
-      finishSoloGame()
-      return
+    if (soloGameState.active) {
+      soloGameState.lives -= 1
+      updateSoloHud()
+      if (soloGameState.lives <= 0) {
+        finishSoloGame()
+        return
+      }
     }
     const hintEl = document.querySelector('#hint')
-    if (hintEl) hintEl.textContent = 'Menjava! Nova QR runda...'
+    if (hintEl) hintEl.textContent = `Zgreseno! Izguba zivljenja. Ostala zivljenja: ${soloGameState.lives}. Ponovi level ${soloGameState.level}.`
     startSoloRound()
   }, ttlMs + 50)
+}
+
+function confirmSoloCatch() {
+  if (!soloGameState.active || !currentSoloRound) return
+  if (soloRoundExpiryTimer) {
+    clearTimeout(soloRoundExpiryTimer)
+    soloRoundExpiryTimer = null
+  }
+  soloGameState.catches += 1
+  soloGameState.level += 1
+  soloVisualState = {
+    size: Math.max(95, soloVisualState.size - 16),
+    hue: (soloVisualState.hue + 75) % 360,
+  }
+  applySoloQrVisual()
+  triggerSoloBurst()
+  updateSoloHud()
+  currentSoloRound = null
+  const hint = document.querySelector('#hint')
+  if (hint) hint.textContent = `Odlicno! Napredujes na level ${soloGameState.level}.`
+  if (soloNextRoundTimer) clearTimeout(soloNextRoundTimer)
+  soloNextRoundTimer = setTimeout(() => {
+    if (soloGameState.active) startSoloRound()
+  }, 650)
 }
 
 async function renderDuelKiosk() {
