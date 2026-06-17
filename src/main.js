@@ -2094,6 +2094,10 @@ function renderScan() {
           <button id="scan-go-player" class="btn">Moji rezultati</button>
         </div>
         <p class="small">Skeniraj QR znotraj aplikacije in odpiralo bo v istem zavihku.</p>
+        <div class="actions scan-controls">
+          <button id="scan-switch-camera" class="btn">Preklopi kamero</button>
+          <button id="scan-toggle-flash" class="btn hidden">Bliskavica ON/OFF</button>
+        </div>
         <div class="scan-frame">
           <video id="scan-video" playsinline muted></video>
         </div>
@@ -2105,8 +2109,12 @@ function renderScan() {
   document.querySelector('#scan-go-player')?.addEventListener('click', () => navigate('/player'))
   const status = document.querySelector('#scan-status')
   const video = document.querySelector('#scan-video')
+  const switchCameraBtn = document.querySelector('#scan-switch-camera')
+  const toggleFlashBtn = document.querySelector('#scan-toggle-flash')
   if (!video) return
   let resolved = false
+  let flashOn = false
+  let currentCamera = 'environment'
   activePhoneScanner = new QrScanner(
     video,
     (result) => {
@@ -2119,20 +2127,63 @@ function renderScan() {
       navigate(route)
     },
     {
-      preferredCamera: 'environment',
+      onDecodeError: (error) => {
+        if (error === QrScanner.NO_QR_CODE_FOUND) return
+        if (status) status.textContent = 'Tezje berem QR. Priblizaj, poravnaj in stabiliziraj.'
+      },
+      calculateScanRegion: (videoEl) => {
+        const side = Math.round(Math.min(videoEl.videoWidth, videoEl.videoHeight) * 0.92)
+        return {
+          x: Math.round((videoEl.videoWidth - side) / 2),
+          y: Math.round((videoEl.videoHeight - side) / 2),
+          width: side,
+          height: side,
+          downScaledWidth: 900,
+          downScaledHeight: 900,
+        }
+      },
+      preferredCamera: currentCamera,
       returnDetailedScanResult: true,
-      maxScansPerSecond: 12,
+      maxScansPerSecond: 25,
       highlightCodeOutline: true,
+      highlightScanRegion: true,
     },
   )
   activePhoneScanner.start()
-    .then(() => {
-      if (status) status.textContent = 'Kamera aktivna. Usmeri na QR.'
+    .then(async () => {
+      activePhoneScanner?.setInversionMode('both')
+      if (status) status.textContent = 'Kamera aktivna. Usmeri na QR in drzi telefon mirno.'
+      const hasFlash = await activePhoneScanner?.hasFlash().catch(() => false)
+      if (toggleFlashBtn && hasFlash) toggleFlashBtn.classList.remove('hidden')
     })
     .catch(() => {
       if (status) status.textContent = 'Kamera ni dostopna. Dovoli kamero v brskalniku.'
       stopPhoneScanner()
     })
+  switchCameraBtn?.addEventListener('click', async () => {
+    if (!activePhoneScanner) return
+    currentCamera = currentCamera === 'environment' ? 'user' : 'environment'
+    try {
+      await activePhoneScanner.setCamera(currentCamera)
+      flashOn = false
+      if (toggleFlashBtn) toggleFlashBtn.textContent = 'Bliskavica ON/OFF'
+      if (status) status.textContent = currentCamera === 'environment' ? 'Zadnja kamera aktivna.' : 'Sprednja kamera aktivna.'
+      const hasFlash = await activePhoneScanner.hasFlash().catch(() => false)
+      if (toggleFlashBtn) toggleFlashBtn.classList.toggle('hidden', !hasFlash)
+    } catch {
+      if (status) status.textContent = 'Preklop kamere ni uspel.'
+    }
+  })
+  toggleFlashBtn?.addEventListener('click', async () => {
+    if (!activePhoneScanner) return
+    try {
+      await activePhoneScanner.toggleFlash()
+      flashOn = !flashOn
+      if (toggleFlashBtn) toggleFlashBtn.textContent = flashOn ? 'Bliskavica OFF' : 'Bliskavica ON'
+    } catch {
+      if (status) status.textContent = 'Bliskavica ni podprta na tej kameri.'
+    }
+  })
 }
 
 function render() {
