@@ -357,6 +357,27 @@ input {
   color: #bbf7d0;
 }
 
+.caught-dwarf-card {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(190, 242, 100, 0.45);
+  background: rgba(30, 41, 59, 0.4);
+}
+
+.caught-dwarf {
+  margin-top: 8px;
+  margin-bottom: 8px;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px dashed rgba(190, 242, 100, 0.55);
+  background: rgba(2, 6, 23, 0.55);
+  color: #d9f99d;
+  white-space: pre;
+  font-family: Consolas, Menlo, monospace;
+  text-align: center;
+}
+
 .record-badge {
   display: inline-block;
   margin-top: 6px;

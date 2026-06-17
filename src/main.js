@@ -714,6 +714,19 @@ function formatReactionTime(ms) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}:${String(centiseconds).padStart(2, '0')}`
 }
 
+function hashText(value = '') {
+  let hash = 0
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash << 5) - hash + value.charCodeAt(i)
+    hash |= 0
+  }
+  return Math.abs(hash)
+}
+
+function getCaughtDwarf(tokenId = '') {
+  return DWARVES[hashText(tokenId || `${Date.now()}`) % DWARVES.length]
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -1476,7 +1489,7 @@ function renderPlayer() {
         ${myRows.length === 0 ? '<p class="muted">Ni rezultatov.</p>' : `
           <ol class="board">
             ${myRows
-              .map((row) => `<li><span>${row.name} (${row.slot || '-'})</span><strong>${row.points} pts</strong><em>${formatReactionTime(row.reactionMs)}</em></li>`)
+              .map((row) => `<li><span>${row.dwarf ? 'ᗢ ' : ''}${row.name} (${row.slot || '-'})</span><strong>${row.points} pts</strong><em>${formatReactionTime(row.reactionMs)}</em></li>`)
               .join('')}
           </ol>
         `}
@@ -1484,6 +1497,7 @@ function renderPlayer() {
 
       <section class="card">
         <h2>Skupna lestvica (Top 20)</h2>
+        <p class="small muted">Deluje v zivo med aktivnimi zasloni (kiosk/player), posodobitev pride prek realtime dogodkov.</p>
         ${globalRows.length === 0 ? '<p class="muted">Se ni rezultatov.</p>' : `
           <ol class="board event-board">
             ${globalRows
@@ -1529,6 +1543,8 @@ function renderClaim(params) {
   let status = ''
   let vibe = ''
   let points = 0
+  let caughtDwarf = ''
+  let reactionLabel = ''
 
   if (isDuplicate) {
     title = 'Ta koda je ze ulovljena'
@@ -1539,6 +1555,8 @@ function renderClaim(params) {
   } else {
     const reactionMs = Math.max(0, now - payload.createdAt)
     points = computePoints(payload, reactionMs)
+    reactionLabel = formatReactionTime(reactionMs)
+    caughtDwarf = getCaughtDwarf(payload.tokenId)
     addClaimedToken(payload.tokenId)
     addScoreEntry({
       tokenId: payload.tokenId,
@@ -1549,10 +1567,11 @@ function renderClaim(params) {
       points,
       reactionMs,
       text: payload.text,
+      dwarf: caughtDwarf,
       createdAt: now,
     })
     title = 'Ulov uspesen'
-    status = `${points} tock | ${formatReactionTime(reactionMs)} | ${payload.type === 'solo-round' ? 'Solo challenge' : `Slot ${payload.slot || '-'}`}`
+    status = `${points} tock | ${reactionLabel} | ${payload.type === 'solo-round' ? 'Solo challenge' : `Slot ${payload.slot || '-'}`}`
     if (payload.type === 'solo-round') {
       const theme = MESSAGE_THEMES[getActiveThemeKey()]
       vibe = randomThemeMessage(theme.vibes, 'Ujet v trenutek.')
@@ -1586,12 +1605,27 @@ function renderClaim(params) {
     })
   }
 
+  const shareText = caughtDwarf
+    ? `${profile.name || 'Anon'} je ujel škrata v QR Rush! ${points} tock, reakcija ${reactionLabel}.`
+    : ''
+  const shareUrl = `${window.location.origin}${window.location.pathname}#/player`
+
   app.innerHTML = `
     <main class="page">
       <section class="card">
         <h1>${title}</h1>
         <p>${status}</p>
         ${vibe ? `<p class="vibe">${vibe}</p>` : ''}
+        ${caughtDwarf ? `
+          <section class="caught-dwarf-card">
+            <p class="small">Ujel si škrata:</p>
+            <pre class="caught-dwarf">${caughtDwarf}</pre>
+            <div class="actions">
+              <button id="share-catch" class="btn primary">Deli na telefonu</button>
+              <a class="btn" href="https://wa.me/?text=${encodeURIComponent(`${shareText} ${shareUrl}`)}" target="_blank" rel="noopener noreferrer">WhatsApp</a>
+            </div>
+          </section>
+        ` : ''}
         <p class="muted">Sporocilo: ${payload.text || 'n/a'}</p>
         <div class="actions">
           <button id="go-player" class="btn primary">Moji rezultati</button>
@@ -1603,6 +1637,25 @@ function renderClaim(params) {
 
   document.querySelector('#go-home')?.addEventListener('click', () => navigate('/'))
   document.querySelector('#go-player')?.addEventListener('click', () => navigate('/player'))
+  document.querySelector('#share-catch')?.addEventListener('click', async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: 'QR Rush',
+          text: shareText,
+          url: shareUrl,
+        })
+        return
+      }
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(`${shareText} ${shareUrl}`)
+        const statusEl = document.querySelector('.muted')
+        if (statusEl) statusEl.textContent = 'Share besedilo je kopirano v odlozisce.'
+      }
+    } catch {
+      // Share can fail if user cancels.
+    }
+  })
 }
 
 function renderStart(params) {
