@@ -983,6 +983,17 @@ function formatReactionTime(ms) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}:${String(centiseconds).padStart(2, '0')}`
 }
 
+function computePercentileRank(value, distribution = []) {
+  const values = distribution
+    .map((item) => Number(item))
+    .filter((item) => Number.isFinite(item))
+    .sort((a, b) => a - b)
+  if (!values.length || !Number.isFinite(Number(value))) return null
+  const belowOrEqual = values.filter((item) => item <= Number(value)).length
+  const percentile = Math.round((belowOrEqual / values.length) * 100)
+  return Math.max(1, Math.min(100, percentile))
+}
+
 function hashText(value = '') {
   let hash = 0
   for (let i = 0; i < value.length; i += 1) {
@@ -1891,6 +1902,7 @@ async function generateRoundTokens(runId) {
 function renderPlayer() {
   const profile = getPlayerProfile()
   const rows = getLeaderboardRows()
+  const eventRows = getEventTop20()
   const postGame = getLastGameOverSummary()
   const canSharePostGame = postGame?.playerId === profile.id
   const surveyCompleted = canSharePostGame && postGame?.surveyCompleted
@@ -1917,6 +1929,9 @@ function renderPlayer() {
     .filter((row) => row.playerId === profile.id)
     .sort((a, b) => b.points - a.points || a.reactionMs - b.reactionMs)
   const best = myRows[0]
+  const eventPoints = eventRows.map((row) => Number(row?.points) || 0).filter((points) => points > 0)
+  const skillPercentile = best ? computePercentileRank(best.points, eventPoints) : null
+  const comparedPlayers = new Set(eventRows.map((row) => row?.playerId).filter(Boolean)).size
 
   app.innerHTML = `
     <main class="page">
@@ -1936,6 +1951,9 @@ function renderPlayer() {
           <p class="record-badge">${best.points} pts</p>
           <p class="small">Najhitrejsi odziv: ${formatReactionTime(best.reactionMs)}</p>
           <p class="small">Izziv: ${best.text || 'Solo challenge'}</p>
+          ${skillPercentile ? `<p class="small"><strong>Percentil spretnosti v igri:</strong> P${skillPercentile}</p>` : ''}
+          ${skillPercentile ? `<p class="small muted">Primerjava je iz trenutnih rezultatov dogodka (${eventPoints.length} rezultatov, ${comparedPlayers || 0} igralcev).</p>` : ''}
+          <p class="small muted">${FOCUS_GAME_DISCLAIMER}</p>
         ` : '<p class="muted">Se ni rezultata. Ujemi prvo QR kodo.</p>'}
       </section>
 
