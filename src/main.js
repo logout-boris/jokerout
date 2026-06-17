@@ -1,5 +1,4 @@
 import QRCode from 'qrcode'
-import QrScanner from 'qr-scanner'
 import { createClient } from '@supabase/supabase-js'
 import './style.css'
 
@@ -31,8 +30,8 @@ const DIFFICULTIES = {
 }
 const SOLO_LEVEL_CONFIGS = [
   { mode: 'easy', label: 'Level 1', ttlMs: 15000, qrSize: 210, speedMultiplier: 1.0 },
-  { mode: 'normal', label: 'Level 2', ttlMs: 12000, qrSize: 185, speedMultiplier: 1.2 },
-  { mode: 'hard', label: 'Level 3', ttlMs: 9500, qrSize: 160, speedMultiplier: 1.45 },
+  { mode: 'normal', label: 'Level 2', ttlMs: 8500, qrSize: 185, speedMultiplier: 1.2 },
+  { mode: 'hard', label: 'Level 3', ttlMs: 6500, qrSize: 160, speedMultiplier: 1.7 },
 ]
 const SOLO_MAX_LEVELS = SOLO_LEVEL_CONFIGS.length
 
@@ -147,7 +146,6 @@ let kioskStartDelayTimer = null
 let kioskIdleIntroTimer = null
 let kioskIntroRunning = false
 let kioskIdleIntroCount = 0
-let activePhoneScanner = null
 let playerSessionRealtimeChannel = null
 let activePlayerSessionId = ''
 let soloGameState = {
@@ -408,36 +406,6 @@ function parseRoute() {
 
 function navigate(path) {
   window.location.hash = path
-}
-
-function stopPhoneScanner() {
-  if (!activePhoneScanner) return
-  const current = activePhoneScanner
-  activePhoneScanner = null
-  current.stop().catch(() => {
-    // Ignore camera stop errors during route changes.
-  })
-  current.destroy()
-}
-
-function extractAppRouteFromScan(rawText = '') {
-  const text = String(rawText || '').trim()
-  if (!text) return null
-  if (text.startsWith('#/')) return text.slice(1)
-  if (text.startsWith('/#/')) return text.slice(2)
-  if (text.startsWith('/')) return text
-  try {
-    const parsed = new URL(text)
-    if (parsed.hash?.startsWith('#/')) return parsed.hash.slice(1)
-    if (parsed.pathname && parsed.pathname !== window.location.pathname) return null
-    if (parsed.search) {
-      const queryRoute = `${parsed.pathname || '/'}${parsed.search}`
-      if (queryRoute.startsWith('/')) return queryRoute
-    }
-  } catch {
-    return null
-  }
-  return null
 }
 
 function saveJSON(key, value) {
@@ -1788,9 +1756,6 @@ function renderPlayer() {
         <p><strong>ID:</strong> <code>${profile.id}</code></p>
         <p><strong>Ime:</strong> ${profile.name || 'Anon'}</p>
         <p><strong>Poskusov:</strong> ${myRows.length}</p>
-        <div class="actions">
-          <button id="open-scan-mode" class="btn primary">Scan mode (isti zavihek)</button>
-        </div>
       </section>
 
       <section class="card">
@@ -1878,7 +1843,6 @@ function renderPlayer() {
   `
 
   document.querySelector('#go-home')?.addEventListener('click', () => navigate('/'))
-  document.querySelector('#open-scan-mode')?.addEventListener('click', () => navigate('/scan'))
   document.querySelector('#clear-postgame')?.addEventListener('click', () => {
     clearLastGameOverSummary()
     renderPlayer()
@@ -2060,13 +2024,12 @@ function renderClaim(params) {
         ${vibe ? `<p class="vibe">${vibe}</p>` : ''}
         ${caughtDwarf ? `
           <section class="caught-dwarf-card">
-            <p class="small">Ujel si škrata:</p>
+            <p class="small">Ujel si skrata:</p>
             <pre class="caught-dwarf">${caughtDwarf}</pre>
           </section>
         ` : ''}
         <p class="muted">Sporocilo: ${payload.text || 'n/a'}</p>
         <div class="actions">
-          <button id="go-scan" class="btn primary">Skeniraj naslednji QR</button>
           <button id="go-player" class="btn primary">Moji rezultati</button>
           <button id="go-home" class="btn">Domov</button>
         </div>
@@ -2074,7 +2037,6 @@ function renderClaim(params) {
     </main>
   `
 
-  document.querySelector('#go-scan')?.addEventListener('click', () => navigate('/scan'))
   document.querySelector('#go-home')?.addEventListener('click', () => navigate('/'))
   document.querySelector('#go-player')?.addEventListener('click', () => navigate('/player'))
 }
@@ -2166,108 +2128,6 @@ function renderJoin(params) {
   })
 }
 
-function renderScan() {
-  stopPhoneScanner()
-  app.innerHTML = `
-    <main class="page">
-      <section class="card">
-        <div class="row-between">
-          <h1>Scan mode</h1>
-          <button id="scan-go-player" class="btn">Moji rezultati</button>
-        </div>
-        <p class="small">Skeniraj QR znotraj aplikacije in odpiralo bo v istem zavihku.</p>
-        <div class="actions scan-controls">
-          <button id="scan-switch-camera" class="btn">Preklopi kamero</button>
-          <button id="scan-toggle-flash" class="btn hidden">Bliskavica ON/OFF</button>
-        </div>
-        <div class="scan-frame">
-          <video id="scan-video" playsinline muted></video>
-        </div>
-        <p id="scan-status" class="muted">Vklapljam kamero ...</p>
-      </section>
-    </main>
-  `
-
-  document.querySelector('#scan-go-player')?.addEventListener('click', () => navigate('/player'))
-  const status = document.querySelector('#scan-status')
-  const video = document.querySelector('#scan-video')
-  const switchCameraBtn = document.querySelector('#scan-switch-camera')
-  const toggleFlashBtn = document.querySelector('#scan-toggle-flash')
-  if (!video) return
-  let resolved = false
-  let flashOn = false
-  let currentCamera = 'environment'
-  activePhoneScanner = new QrScanner(
-    video,
-    (result) => {
-      const text = typeof result === 'string' ? result : result?.data
-      const route = extractAppRouteFromScan(text)
-      if (!route || resolved) return
-      resolved = true
-      if (status) status.textContent = 'QR prepoznan. Odpiram ...'
-      stopPhoneScanner()
-      navigate(route)
-    },
-    {
-      onDecodeError: (error) => {
-        if (error === QrScanner.NO_QR_CODE_FOUND) return
-        if (status) status.textContent = 'Tezje berem QR. Priblizaj, poravnaj in stabiliziraj.'
-      },
-      calculateScanRegion: (videoEl) => {
-        const side = Math.round(Math.min(videoEl.videoWidth, videoEl.videoHeight) * 0.92)
-        return {
-          x: Math.round((videoEl.videoWidth - side) / 2),
-          y: Math.round((videoEl.videoHeight - side) / 2),
-          width: side,
-          height: side,
-          downScaledWidth: 900,
-          downScaledHeight: 900,
-        }
-      },
-      preferredCamera: currentCamera,
-      returnDetailedScanResult: true,
-      maxScansPerSecond: 25,
-      highlightCodeOutline: true,
-      highlightScanRegion: true,
-    },
-  )
-  activePhoneScanner.start()
-    .then(async () => {
-      activePhoneScanner?.setInversionMode('both')
-      if (status) status.textContent = 'Kamera aktivna. Usmeri na QR in drzi telefon mirno.'
-      const hasFlash = await activePhoneScanner?.hasFlash().catch(() => false)
-      if (toggleFlashBtn && hasFlash) toggleFlashBtn.classList.remove('hidden')
-    })
-    .catch(() => {
-      if (status) status.textContent = 'Kamera ni dostopna. Dovoli kamero v brskalniku.'
-      stopPhoneScanner()
-    })
-  switchCameraBtn?.addEventListener('click', async () => {
-    if (!activePhoneScanner) return
-    currentCamera = currentCamera === 'environment' ? 'user' : 'environment'
-    try {
-      await activePhoneScanner.setCamera(currentCamera)
-      flashOn = false
-      if (toggleFlashBtn) toggleFlashBtn.textContent = 'Bliskavica ON/OFF'
-      if (status) status.textContent = currentCamera === 'environment' ? 'Zadnja kamera aktivna.' : 'Sprednja kamera aktivna.'
-      const hasFlash = await activePhoneScanner.hasFlash().catch(() => false)
-      if (toggleFlashBtn) toggleFlashBtn.classList.toggle('hidden', !hasFlash)
-    } catch {
-      if (status) status.textContent = 'Preklop kamere ni uspel.'
-    }
-  })
-  toggleFlashBtn?.addEventListener('click', async () => {
-    if (!activePhoneScanner) return
-    try {
-      await activePhoneScanner.toggleFlash()
-      flashOn = !flashOn
-      if (toggleFlashBtn) toggleFlashBtn.textContent = flashOn ? 'Bliskavica OFF' : 'Bliskavica ON'
-    } catch {
-      if (status) status.textContent = 'Bliskavica ni podprta na tej kameri.'
-    }
-  })
-}
-
 function render() {
   const { path, params } = parseRoute()
   const blockKioskForPhone = isPhonePlayerDevice() && ['/', '/solo-kiosk', '/duel-kiosk'].includes(path)
@@ -2282,10 +2142,7 @@ function render() {
     soloGameState.active = false
     currentSoloRound = null
   }
-  if (path !== '/scan') {
-    stopPhoneScanner()
-  }
-  if (!['/player', '/start', '/claim', '/scan'].includes(path)) {
+  if (!['/player', '/start', '/claim'].includes(path)) {
     teardownPlayerSessionRealtime()
   }
   if (path === '/solo-kiosk') {
@@ -2319,10 +2176,6 @@ function render() {
       })
     }
     renderPlayer()
-    return
-  }
-  if (path === '/scan') {
-    renderScan()
     return
   }
   renderHome()
