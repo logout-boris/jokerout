@@ -1084,7 +1084,7 @@ async function renderSoloKiosk() {
             <img id="solo-qr" alt="Solo round QR" />
           </div>
           <section id="kiosk-intro" class="kiosk-intro stage-panel">
-            <p class="intro-title" id="intro-title">Lovilec pozornosti Intro</p>
+            <p class="intro-title" id="intro-title">Ulovi kradljivce pozornosti in postani delilec pozornosti</p>
             <div class="intro-dwarves">${introDwarvesHtml}</div>
             <p class="small intro-sub" id="intro-sub">Skrati vabijo v igro. Pripravi telefon!</p>
             <p class="small intro-cta hidden" id="intro-cta">${LOGOUT_STAND_INVITE}</p>
@@ -1216,7 +1216,7 @@ async function playKioskIntro({ extended = false } = {}) {
   const introCta = document.querySelector('#intro-cta')
   try {
     overlay.classList.toggle('is-special', extended)
-    if (introTitle) introTitle.textContent = extended ? 'Vecerni Intro' : 'Lovilec pozornosti Intro'
+    if (introTitle) introTitle.textContent = 'Ulovi kradljivce pozornosti in postani delilec pozornosti'
     if (introSub) introSub.textContent = extended
       ? 'Skrati vabijo vse v igro in na logout.org stojnico!'
       : 'Skrati vabijo v igro. Pripravi telefon!'
