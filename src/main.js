@@ -1057,9 +1057,6 @@ async function renderSoloKiosk() {
             <button id="toggle-fullscreen" class="btn primary">Fullscreen</button>
           </div>
         </div>
-        <div class="inline-form control-row">
-          <span>Stopnje so avtomatske: <strong>1 / ${SOLO_MAX_LEVELS}</strong></span>
-        </div>
         <div class="hud">
           <p>Zivljenja: <strong id="solo-lives" class="lives-pixels"></strong></p>
           <p>Level: <strong id="solo-level" class="stat-level">1</strong></p>
