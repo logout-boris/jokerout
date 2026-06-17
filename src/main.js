@@ -394,12 +394,13 @@ async function renderSoloKiosk() {
         <pre id="ascii-dwarf" class="ascii-dwarf"></pre>
         <div id="solo-stage" class="solo-stage">
           <div id="solo-burst" class="solo-burst"></div>
+          <div id="catch-banner" class="catch-banner hidden">UJETO!</div>
           <div id="solo-qr-node" class="monster-frame hidden">
             <img id="solo-qr" alt="Solo round QR" />
           </div>
         </div>
         <div class="inline-form">
-          <button id="confirm-catch" class="btn primary">Ujeto! Naslednji level</button>
+          <button id="confirm-catch" class="btn primary">Ujeto!</button>
         </div>
         <p class="small" id="hint"></p>
         <section id="solo-result" class="card-sub hidden"></section>
@@ -608,14 +609,22 @@ function confirmSoloCatch() {
   }
   applySoloQrVisual()
   triggerSoloBurst()
+  const banner = document.querySelector('#catch-banner')
+  if (banner) {
+    banner.classList.remove('hidden')
+    banner.classList.remove('show')
+    void banner.offsetWidth
+    banner.classList.add('show')
+  }
   updateSoloHud()
   currentSoloRound = null
   const hint = document.querySelector('#hint')
   if (hint) hint.textContent = `Odlicno! Napredujes na level ${soloGameState.level}.`
   if (soloNextRoundTimer) clearTimeout(soloNextRoundTimer)
   soloNextRoundTimer = setTimeout(() => {
+    if (banner) banner.classList.add('hidden')
     if (soloGameState.active) startSoloRound()
-  }, 650)
+  }, 850)
 }
 
 async function renderDuelKiosk() {

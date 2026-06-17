@@ -84,6 +84,7 @@ p {
   font-weight: 700;
   color: #facc15;
   min-height: 39px;
+  text-align: center;
 }
 
 .ascii-dwarf {
@@ -96,6 +97,7 @@ p {
   color: #bef264;
   white-space: pre;
   font-family: Consolas, Menlo, monospace;
+  text-align: center;
 }
 
 code {
@@ -246,6 +248,46 @@ input {
 
 .solo-burst.pulse {
   animation: burstFlash 420ms ease-out;
+}
+
+.catch-banner {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: clamp(46px, 9vw, 110px);
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: #fef08a;
+  text-shadow:
+    0 0 10px rgba(250, 204, 21, 0.8),
+    0 0 26px rgba(236, 72, 153, 0.7);
+  pointer-events: none;
+  z-index: 4;
+  opacity: 0;
+}
+
+.catch-banner.show {
+  animation: catchPop 820ms ease-out;
+}
+
+@keyframes catchPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  22% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
 }
 
 @keyframes burstFlash {
