@@ -45,6 +45,14 @@ const MESSAGES = [
   { text: 'Lucky shot', base: 45 },
   { text: 'Flash pick', base: 60 },
 ]
+const DIGITAL_RECIPES = [
+  'Recept: vsak dan 30 minut brez telefona - samo glasba, pogovor ali sprehod.',
+  'Recept: izklopi notifikacije za socialna omrezja vsaj med solo casom in koncerti.',
+  'Recept: pred spanjem odlozi telefon 60 minut prej in umiri glavo brez scrolla.',
+  'Recept: nastavi 3 konkretne termine za preverjanje appov, ne neprestano odpiranje.',
+  'Recept: ko zacutis impulz za scroll, naredi 10 globokih vdihov in poglej okoli sebe.',
+  'Recept: imej en obrok na dan brez ekrana - samo okus, ljudje in trenutek.',
+]
 
 const MESSAGE_THEMES = {
   concert: {
@@ -376,6 +384,7 @@ async function setupPlayerSessionRealtime(sessionId) {
       catches: Number(payload?.catches) || 0,
       motivation: payload?.motivation || 'logout.org: Ujemi trenutek, ne notifikacij.',
       invite: payload?.invite || LOGOUT_STAND_INVITE,
+      recipe: payload?.recipe || randomDigitalRecipe(),
       sessionId: payload?.sessionId || sessionId,
       reason: payload?.reason || 'gameover',
       completedAt: payload?.completedAt || Date.now(),
@@ -488,6 +497,10 @@ function randomThemeMessage(list, fallback = '') {
   return list[Math.floor(Math.random() * list.length)]
 }
 
+function randomDigitalRecipe() {
+  return randomThemeMessage(DIGITAL_RECIPES, 'Recept: zavestno odlozi telefon in vrni fokus sebi.')
+}
+
 function isFullscreenActive() {
   return Boolean(document.fullscreenElement)
 }
@@ -572,6 +585,7 @@ function finishSoloGame(reason = 'gameover') {
   const playerName = soloGameState.currentPlayerName || 'Anon'
   const theme = MESSAGE_THEMES[getActiveThemeKey()]
   const motivationCore = randomThemeMessage(theme.prevention, 'Odklopi obvestila in uzivaj koncert.')
+  const recipe = randomDigitalRecipe()
   const motivation = `logout.org: Ujel si ${catches} skratov, ki jemljejo pozornost. ${motivationCore} ${LOGOUT_STAND_INVITE}`
   soloGameState.active = false
   if (soloGameState.currentScore > 0) {
@@ -591,6 +605,7 @@ function finishSoloGame(reason = 'gameover') {
       reason,
       motivation,
       invite: LOGOUT_STAND_INVITE,
+      recipe,
       completedAt: Date.now(),
     }).catch(() => {
       // Keep kiosk flow resilient even if game_over signal fails.
@@ -865,7 +880,7 @@ function wrapCanvasText(ctx, text, maxWidth) {
   return lines
 }
 
-function createPostGameShareImage({ playerName = 'Anon', catches = 0, motivation = '' } = {}) {
+function createPostGameShareImage({ playerName = 'Anon', catches = 0, motivation = '', recipe = '' } = {}) {
   const canvas = document.createElement('canvas')
   const width = 1080
   const height = 1350
@@ -908,13 +923,20 @@ function createPostGameShareImage({ playerName = 'Anon', catches = 0, motivation
   ctx.fillStyle = '#bfdbfe'
   ctx.font = '600 34px Inter, sans-serif'
   const messageLines = wrapCanvasText(ctx, motivation, width - 156)
-  messageLines.slice(0, 8).forEach((line, idx) => {
+  messageLines.slice(0, 6).forEach((line, idx) => {
     ctx.fillText(line, 78, 650 + idx * 48)
+  })
+
+  ctx.fillStyle = '#fef08a'
+  ctx.font = '700 30px Inter, sans-serif'
+  const recipeLines = wrapCanvasText(ctx, recipe, width - 156)
+  recipeLines.slice(0, 4).forEach((line, idx) => {
+    ctx.fillText(line, 78, 970 + idx * 42)
   })
 
   ctx.fillStyle = '#93c5fd'
   ctx.font = '600 30px Inter, sans-serif'
-  ctx.fillText(LOGOUT_STAND_INVITE, 78, height - 152)
+  ctx.fillText(LOGOUT_STAND_INVITE, 78, height - 150)
   ctx.fillText('Ujemi trenutek. Ne notifikacij.', 78, height - 104)
 
   return canvas.toDataURL('image/png')
@@ -1714,8 +1736,9 @@ function renderPlayer() {
   const globalRows = getEventTop20()
   const postGame = getLastGameOverSummary()
   const canSharePostGame = postGame?.playerId === profile.id
+  const postGameRecipe = canSharePostGame ? (postGame.recipe || randomDigitalRecipe()) : ''
   const postGameShareText = canSharePostGame
-    ? `Ujel sem ${postGame.catches} skratov, ki nam jemljejo pozornost. ${postGame.motivation} ${postGame.invite || LOGOUT_STAND_INVITE}`
+    ? `Ujel sem ${postGame.catches} skratov, ki nam jemljejo pozornost. ${postGameRecipe} ${postGame.motivation} ${postGame.invite || LOGOUT_STAND_INVITE}`
     : ''
   const postGameShareUrl = `${window.location.origin}${window.location.pathname}#/player`
   const postGameShareImage = canSharePostGame
@@ -1723,6 +1746,7 @@ function renderPlayer() {
       playerName: profile.name || 'Anon',
       catches: postGame.catches,
       motivation: postGame.motivation,
+      recipe: postGameRecipe,
     })
     : ''
   const myRows = rows
@@ -1758,6 +1782,7 @@ function renderPlayer() {
         <section class="card postgame-share-card">
           <h2>Game over povzetek</h2>
           <p>Ujel si <strong>${postGame.catches}</strong> skratov, ki jemljejo pozornost.</p>
+          <p class="recipe-line"><strong>Recept za fokus:</strong> ${postGameRecipe}</p>
           <p class="vibe">${postGame.motivation}</p>
           <p class="small invite-line">${postGame.invite || LOGOUT_STAND_INVITE}</p>
           ${postGameShareImage ? `<img class="postgame-share-preview" src="${postGameShareImage}" alt="Share povzetek" />` : ''}
