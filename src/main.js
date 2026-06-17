@@ -42,6 +42,14 @@ const GOOD_VIBES = [
   'Notifications Off. Music On.',
 ]
 
+const PREVENTION_MESSAGES = [
+  'Odklopi obvestila. Priklopi se na koncert.',
+  'Posnemi manj, dozivi vec.',
+  'Telefon lahko pocaka - trenutek ne.',
+  'Poglej na oder, ne na zaslon.',
+  'Naj bo spomin v glavi, ne v feedu.',
+]
+
 const DWARVES = [
   '  /\\_/\\\n ( o.o )\n /|_|_\\\n  / \\',
   '  .-"""-.\n / 0 0  \\\n |  ^   |\n | \'-\'  |\n /|_|_|\\',
@@ -657,6 +665,7 @@ async function renderSoloKiosk() {
           <h3>Top 20</h3>
           <ol id="event-top20" class="board"></ol>
         </section>
+        <p id="prevention-message" class="prevention-message"></p>
         <p class="small" id="hint"></p>
         <section id="solo-result" class="card-sub hidden"></section>
       </section>
@@ -915,6 +924,14 @@ function confirmSoloCatch() {
   currentSoloRound = null
   const hint = document.querySelector('#hint')
   if (hint) hint.textContent = 'Bravo, nova runda!'
+  const prevention = document.querySelector('#prevention-message')
+  if (prevention) {
+    const msg = PREVENTION_MESSAGES[Math.floor(Math.random() * PREVENTION_MESSAGES.length)]
+    prevention.textContent = msg
+    prevention.classList.remove('show')
+    void prevention.offsetWidth
+    prevention.classList.add('show')
+  }
   if (soloNextRoundTimer) clearTimeout(soloNextRoundTimer)
   soloNextRoundTimer = setTimeout(() => {
     if (banner) banner.classList.add('hidden')

@@ -210,6 +210,23 @@ input {
   color: #fde68a;
 }
 
+.prevention-message {
+  margin-top: 10px;
+  min-height: 34px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(147, 197, 253, 0.35);
+  background: rgba(30, 58, 138, 0.25);
+  color: #bfdbfe;
+  font-weight: 600;
+  text-align: center;
+  opacity: 0.9;
+}
+
+.prevention-message.show {
+  animation: preventionPop 620ms ease-out;
+}
+
 .settings-toggle {
   margin-top: 10px;
 }
@@ -561,6 +578,21 @@ input {
   100% {
     transform: scale(1);
     filter: brightness(1);
+  }
+}
+
+@keyframes preventionPop {
+  0% {
+    opacity: 0.2;
+    transform: translateY(4px);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
