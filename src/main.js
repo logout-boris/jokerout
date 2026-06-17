@@ -1,4 +1,5 @@
 import QRCode from 'qrcode'
+import QrScanner from 'qr-scanner'
 import { createClient } from '@supabase/supabase-js'
 import './style.css'
 
@@ -123,6 +124,7 @@ let audioCtx = null
 let audioUnlockBound = false
 let kioskLeaderboardTimer = null
 let kioskStartDelayTimer = null
+let activePhoneScanner = null
 let soloGameState = {
   active: false,
   lives: 3,
@@ -332,6 +334,36 @@ function parseRoute() {
 
 function navigate(path) {
   window.location.hash = path
+}
+
+function stopPhoneScanner() {
+  if (!activePhoneScanner) return
+  const current = activePhoneScanner
+  activePhoneScanner = null
+  current.stop().catch(() => {
+    // Ignore camera stop errors during route changes.
+  })
+  current.destroy()
+}
+
+function extractAppRouteFromScan(rawText = '') {
+  const text = String(rawText || '').trim()
+  if (!text) return null
+  if (text.startsWith('#/')) return text.slice(1)
+  if (text.startsWith('/#/')) return text.slice(2)
+  if (text.startsWith('/')) return text
+  try {
+    const parsed = new URL(text)
+    if (parsed.hash?.startsWith('#/')) return parsed.hash.slice(1)
+    if (parsed.pathname && parsed.pathname !== window.location.pathname) return null
+    if (parsed.search) {
+      const queryRoute = `${parsed.pathname || '/'}${parsed.search}`
+      if (queryRoute.startsWith('/')) return queryRoute
+    }
+  } catch {
+    return null
+  }
+  return null
 }
 
 function saveJSON(key, value) {
@@ -1473,6 +1505,9 @@ function renderPlayer() {
         <p><strong>ID:</strong> <code>${profile.id}</code></p>
         <p><strong>Ime:</strong> ${profile.name || 'Anon'}</p>
         <p><strong>Poskusov:</strong> ${myRows.length}</p>
+        <div class="actions">
+          <button id="open-scan-mode" class="btn primary">Scan mode (isti zavihek)</button>
+        </div>
       </section>
 
       <section class="card">
@@ -1510,6 +1545,7 @@ function renderPlayer() {
   `
 
   document.querySelector('#go-home')?.addEventListener('click', () => navigate('/'))
+  document.querySelector('#open-scan-mode')?.addEventListener('click', () => navigate('/scan'))
 }
 
 function renderClaim(params) {
@@ -1628,6 +1664,7 @@ function renderClaim(params) {
         ` : ''}
         <p class="muted">Sporocilo: ${payload.text || 'n/a'}</p>
         <div class="actions">
+          <button id="go-scan" class="btn primary">Skeniraj naslednji QR</button>
           <button id="go-player" class="btn primary">Moji rezultati</button>
           <button id="go-home" class="btn">Domov</button>
         </div>
@@ -1635,6 +1672,7 @@ function renderClaim(params) {
     </main>
   `
 
+  document.querySelector('#go-scan')?.addEventListener('click', () => navigate('/scan'))
   document.querySelector('#go-home')?.addEventListener('click', () => navigate('/'))
   document.querySelector('#go-player')?.addEventListener('click', () => navigate('/player'))
   document.querySelector('#share-catch')?.addEventListener('click', async () => {
@@ -1738,6 +1776,57 @@ function renderJoin(params) {
   })
 }
 
+function renderScan() {
+  stopPhoneScanner()
+  app.innerHTML = `
+    <main class="page">
+      <section class="card">
+        <div class="row-between">
+          <h1>Scan mode</h1>
+          <button id="scan-go-player" class="btn">Moji rezultati</button>
+        </div>
+        <p class="small">Skeniraj QR znotraj aplikacije in odpiralo bo v istem zavihku.</p>
+        <div class="scan-frame">
+          <video id="scan-video" playsinline muted></video>
+        </div>
+        <p id="scan-status" class="muted">Vklapljam kamero ...</p>
+      </section>
+    </main>
+  `
+
+  document.querySelector('#scan-go-player')?.addEventListener('click', () => navigate('/player'))
+  const status = document.querySelector('#scan-status')
+  const video = document.querySelector('#scan-video')
+  if (!video) return
+  let resolved = false
+  activePhoneScanner = new QrScanner(
+    video,
+    (result) => {
+      const text = typeof result === 'string' ? result : result?.data
+      const route = extractAppRouteFromScan(text)
+      if (!route || resolved) return
+      resolved = true
+      if (status) status.textContent = 'QR prepoznan. Odpiram ...'
+      stopPhoneScanner()
+      navigate(route)
+    },
+    {
+      preferredCamera: 'environment',
+      returnDetailedScanResult: true,
+      maxScansPerSecond: 12,
+      highlightCodeOutline: true,
+    },
+  )
+  activePhoneScanner.start()
+    .then(() => {
+      if (status) status.textContent = 'Kamera aktivna. Usmeri na QR.'
+    })
+    .catch(() => {
+      if (status) status.textContent = 'Kamera ni dostopna. Dovoli kamero v brskalniku.'
+      stopPhoneScanner()
+    })
+}
+
 function render() {
   const { path, params } = parseRoute()
   const blockKioskForPhone = isPhonePlayerDevice() && ['/', '/solo-kiosk', '/duel-kiosk'].includes(path)
@@ -1751,6 +1840,9 @@ function render() {
     clearSoloTimers()
     soloGameState.active = false
     currentSoloRound = null
+  }
+  if (path !== '/scan') {
+    stopPhoneScanner()
   }
   if (path === '/solo-kiosk') {
     renderSoloKiosk()
@@ -1777,6 +1869,10 @@ function render() {
       // Player view still works with cached data if realtime isn't available.
     })
     renderPlayer()
+    return
+  }
+  if (path === '/scan') {
+    renderScan()
     return
   }
   renderHome()
