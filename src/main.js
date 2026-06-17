@@ -8,6 +8,7 @@ const SUPABASE_URL = 'https://hezvtqurbxaxmvcrmuuu.supabase.co'
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_QkiVaVk0SKwT4CrF0PF4aA_DjvdGbTi'
 const ADMIN_RESET_PIN = '3030'
 const GLOBAL_CHANNEL_NAME = 'qr-rush-global'
+const LOGOUT_STAND_INVITE = 'Pridi na logout.org stojnico - cakamo te!'
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
 
 const STORAGE = {
@@ -371,6 +372,7 @@ async function setupPlayerSessionRealtime(sessionId) {
       playerId: profile.id,
       catches: Number(payload?.catches) || 0,
       motivation: payload?.motivation || 'logout.org: Ujemi trenutek, ne notifikacij.',
+      invite: payload?.invite || LOGOUT_STAND_INVITE,
       sessionId: payload?.sessionId || sessionId,
       reason: payload?.reason || 'gameover',
       completedAt: payload?.completedAt || Date.now(),
@@ -561,7 +563,7 @@ function finishSoloGame(reason = 'gameover') {
   const playerName = soloGameState.currentPlayerName || 'Anon'
   const theme = MESSAGE_THEMES[getActiveThemeKey()]
   const motivationCore = randomThemeMessage(theme.prevention, 'Odklopi obvestila in uzivaj koncert.')
-  const motivation = `logout.org: Ujel si ${catches} skratov, ki jemljejo pozornost. ${motivationCore}`
+  const motivation = `logout.org: Ujel si ${catches} skratov, ki jemljejo pozornost. ${motivationCore} ${LOGOUT_STAND_INVITE}`
   soloGameState.active = false
   if (soloGameState.currentScore > 0) {
     pushEventTopEntry({
@@ -579,6 +581,7 @@ function finishSoloGame(reason = 'gameover') {
       catches,
       reason,
       motivation,
+      invite: LOGOUT_STAND_INVITE,
       completedAt: Date.now(),
     }).catch(() => {
       // Keep kiosk flow resilient even if game_over signal fails.
@@ -902,7 +905,8 @@ function createPostGameShareImage({ playerName = 'Anon', catches = 0, motivation
 
   ctx.fillStyle = '#93c5fd'
   ctx.font = '600 30px Inter, sans-serif'
-  ctx.fillText('Ujemi trenutek. Ne notifikacij.', 78, height - 112)
+  ctx.fillText(LOGOUT_STAND_INVITE, 78, height - 152)
+  ctx.fillText('Ujemi trenutek. Ne notifikacij.', 78, height - 104)
 
   return canvas.toDataURL('image/png')
 }
@@ -1647,7 +1651,7 @@ function renderPlayer() {
   const postGame = getLastGameOverSummary()
   const canSharePostGame = postGame?.playerId === profile.id
   const postGameShareText = canSharePostGame
-    ? `Ujel sem ${postGame.catches} skratov, ki nam jemljejo pozornost. ${postGame.motivation}`
+    ? `Ujel sem ${postGame.catches} skratov, ki nam jemljejo pozornost. ${postGame.motivation} ${postGame.invite || LOGOUT_STAND_INVITE}`
     : ''
   const postGameShareUrl = `${window.location.origin}${window.location.pathname}#/player`
   const postGameShareImage = canSharePostGame
@@ -1691,6 +1695,7 @@ function renderPlayer() {
           <h2>Game over povzetek</h2>
           <p>Ujel si <strong>${postGame.catches}</strong> skratov, ki jemljejo pozornost.</p>
           <p class="vibe">${postGame.motivation}</p>
+          <p class="small invite-line">${postGame.invite || LOGOUT_STAND_INVITE}</p>
           ${postGameShareImage ? `<img class="postgame-share-preview" src="${postGameShareImage}" alt="Share povzetek" />` : ''}
           <div class="actions">
             <button id="share-postgame" class="btn primary">Deli z vsemi</button>

@@ -392,6 +392,12 @@ input {
   box-shadow: 0 0 0 2px rgba(2, 6, 23, 0.7);
 }
 
+.invite-line {
+  margin-top: 8px;
+  color: #5eead4;
+  font-weight: 700;
+}
+
 .scan-frame {
   margin-top: 10px;
   border-radius: 12px;
