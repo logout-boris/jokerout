@@ -8,6 +8,7 @@ const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_QkiVaVk0SKwT4CrF0PF4aA_DjvdGbTi
 const ADMIN_RESET_PIN = '3030'
 const GLOBAL_CHANNEL_NAME = 'lovilec-pozornosti-global'
 const LOGOUT_STAND_INVITE = 'Pridi na logout.org stojnico - cakamo te!'
+const FOCUS_GAME_DISCLAIMER = 'To je igriv indikator fokusa in odzivnosti, ne diagnosticni test pozornosti.'
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
 
 const STORAGE = {
@@ -273,9 +274,12 @@ async function sendSessionEvent(sessionId, event, payload = {}) {
 }
 
 async function sendGlobalEvent(event, payload = {}) {
-  const channel = supabase.channel(GLOBAL_CHANNEL_NAME)
+  const channel = globalRealtimeChannel || supabase.channel(GLOBAL_CHANNEL_NAME)
+  const shouldCleanup = !globalRealtimeChannel
   try {
-    await waitForChannelSubscribed(channel)
+    if (shouldCleanup) {
+      await waitForChannelSubscribed(channel)
+    }
     await channel.send({
       type: 'broadcast',
       event,
@@ -284,8 +288,13 @@ async function sendGlobalEvent(event, payload = {}) {
         sentAt: Date.now(),
       },
     })
+    return true
+  } catch {
+    return false
   } finally {
-    await supabase.removeChannel(channel)
+    if (shouldCleanup) {
+      await supabase.removeChannel(channel)
+    }
   }
 }
 
@@ -587,11 +596,12 @@ function renderSoloGameOver(summary = null, phase = 'result') {
       <h3>${summary.completedAllLevels ? 'Konec igre - odlicno!' : 'Game over'}</h3>
       <p>Ujel si <strong>${summary.catches}</strong> skratov.</p>
       <div class="focus-metrics kiosk-focus-metrics">
-        <p><strong>Povprecni odziv:</strong> ${avgLabel}</p>
+        <p><strong>Povprecni odziv v igri:</strong> ${avgLabel}</p>
         <p><strong>Skupni cas igre:</strong> ${totalLabel}</p>
       </div>
-      <p class="science-line"><strong>Znanstveni vpogled:</strong> ${escapeHtml(summary.scienceInsight || randomScienceInsight())}</p>
+      <p class="science-line"><strong>Fokus mini-vpogled:</strong> ${escapeHtml(summary.scienceInsight || randomScienceInsight())}</p>
       <p class="small">${escapeHtml(summary.resultMessage || '')}</p>
+      <p class="small">${FOCUS_GAME_DISCLAIMER}</p>
     `
   }
   panel.classList.remove('hidden')
@@ -926,19 +936,20 @@ function renderAttentionTicker() {
 
 async function saveAttentionThought(thought) {
   pushAttentionThought(thought)
-  sendGlobalEvent('attention_thought', { thought }).catch(() => {
-    // Sharing thought should not fail because realtime send fails.
-  })
+  const realtimeOk = await sendGlobalEvent('attention_thought', { thought })
+  let dbOk = false
   try {
-    await supabase.from('attention_thoughts').insert({
+    const { error } = await supabase.from('attention_thoughts').insert({
       thought_id: thought.id,
       text: thought.text,
       author: thought.author,
       created_at: new Date(thought.createdAt).toISOString(),
     })
+    dbOk = !error
   } catch {
-    // Optional DB persistence can fail (missing table/policy); realtime still shares it.
+    dbOk = false
   }
+  return { realtimeOk, dbOk }
 }
 
 function resetEventData() {
@@ -1065,8 +1076,9 @@ function createPostGameShareImage({
 
   ctx.fillStyle = '#93c5fd'
   ctx.font = '600 30px Inter, sans-serif'
-  ctx.fillText(`Povprecni odziv: ${avgReactionMs > 0 ? formatReactionTime(avgReactionMs) : 'n/a'}`, 78, 1146)
+  ctx.fillText(`Povprecni odziv v igri: ${avgReactionMs > 0 ? formatReactionTime(avgReactionMs) : 'n/a'}`, 78, 1146)
   ctx.fillText(`Skupni cas igre: ${totalPlayMs > 0 ? formatReactionTime(totalPlayMs) : '00:00:00'}`, 78, 1190)
+  ctx.fillText('Igriv indikator fokusa, ne diagnosticni test.', 78, height - 196)
 
   ctx.fillText(LOGOUT_STAND_INVITE, 78, height - 150)
   ctx.fillText('Ujemi trenutek. Ne notifikacij.', 78, height - 104)
@@ -1122,7 +1134,7 @@ function renderHome() {
     <main class="page">
       <section class="card hero">
         <p class="tag">JokerOut Lovilec pozornosti</p>
-        <h1>Solo Lovilec pozornosti (static hosting)</h1>
+        <h1>Solo izziv fokusa (Lovilec pozornosti)</h1>
         <p>En igralec skenira gibajoco QR kodo. Po ulovu je koda manjsa in druge barve.</p>
         <div class="actions">
           <button id="go-kiosk" class="btn primary">Odpri solo kiosk</button>
@@ -1888,7 +1900,7 @@ function renderPlayer() {
   const postGameAvgReaction = canSharePostGame ? Math.max(0, Number(postGame.avgReactionMs) || 0) : 0
   const postGameTotalPlay = canSharePostGame ? Math.max(0, Number(postGame.totalPlayMs) || 0) : 0
   const postGameShareText = canSharePostGame
-    ? `Ujel sem ${postGame.catches} skratov, ki nam jemljejo pozornost. Povprecni odziv: ${postGameAvgReaction > 0 ? formatReactionTime(postGameAvgReaction) : 'n/a'}. Skupni cas igre: ${formatReactionTime(postGameTotalPlay)}. ${postGameRecipe} ${postGame.motivation} ${postGame.invite || LOGOUT_STAND_INVITE}`
+    ? `Ujel sem ${postGame.catches} skratov, ki nam jemljejo pozornost. Povprecni odziv v igri: ${postGameAvgReaction > 0 ? formatReactionTime(postGameAvgReaction) : 'n/a'}. Skupni cas igre: ${formatReactionTime(postGameTotalPlay)}. ${postGameRecipe} ${postGame.motivation} ${postGame.invite || LOGOUT_STAND_INVITE} To je igriv indikator fokusa, ne diagnosticni test.`
     : ''
   const postGameShareUrl = `${window.location.origin}${window.location.pathname}#/player`
   const postGameShareImage = canSharePostGame
@@ -1932,10 +1944,11 @@ function renderPlayer() {
           <h2>Game over povzetek</h2>
           <p>Ujel si <strong>${postGame.catches}</strong> skratov, ki jemljejo pozornost.</p>
           <div class="focus-metrics">
-            <p><strong>Povprecni odziv:</strong> ${postGameAvgReaction > 0 ? formatReactionTime(postGameAvgReaction) : 'n/a'}</p>
+            <p><strong>Povprecni odziv v igri:</strong> ${postGameAvgReaction > 0 ? formatReactionTime(postGameAvgReaction) : 'n/a'}</p>
             <p><strong>Skupni cas igre:</strong> ${formatReactionTime(postGameTotalPlay)}</p>
           </div>
-          <p class="science-line"><strong>Znanstveni vpogled:</strong> ${postGameInsight}</p>
+          <p class="science-line"><strong>Fokus mini-vpogled:</strong> ${postGameInsight}</p>
+          <p class="small">${FOCUS_GAME_DISCLAIMER}</p>
           <p class="recipe-line"><strong>Recept za fokus:</strong> ${postGameRecipe}</p>
           <p class="vibe">${postGame.motivation}</p>
           <p class="small invite-line">${postGame.invite || LOGOUT_STAND_INVITE}</p>
@@ -2334,8 +2347,16 @@ function renderAttentionShare(params) {
       createdAt: Date.now(),
     }
     if (status) status.textContent = 'Objavljam ...'
-    await saveAttentionThought(thought)
-    if (status) status.textContent = 'Hvala! Tvoja misel zdaj tece na kiosku.'
+    const saveResult = await saveAttentionThought(thought)
+    if (status) {
+      if (saveResult.realtimeOk) {
+        status.textContent = 'Hvala! Tvoja misel zdaj tece na kiosku.'
+      } else if (saveResult.dbOk) {
+        status.textContent = 'Misel je shranjena. Kiosk osvezi stran, ce se ticker ne posodobi.'
+      } else {
+        status.textContent = 'Misel je lokalno oddana, a povezava do kioska ni uspela. Poskusi znova.'
+      }
+    }
     setTimeout(() => navigate('/player'), 1100)
   })
 }
