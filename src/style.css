@@ -27,7 +27,7 @@ body {
   max-width: 100%;
   width: 100%;
   margin: 0;
-  padding-inline: clamp(10px, 2vw, 22px);
+  padding-inline: clamp(8px, 1.4vw, 16px);
 }
 
 .kiosk-page {
@@ -38,6 +38,13 @@ body {
 .kiosk-page > .card {
   width: 100%;
   max-width: none;
+}
+
+.kiosk-shell {
+  max-width: 1500px;
+  margin: 0 auto;
+  border-color: rgba(59, 130, 246, 0.25);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45);
 }
 
 .row-actions {
@@ -125,6 +132,14 @@ code {
   margin-top: 12px;
 }
 
+.control-row {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
 .btn {
   border: 1px solid rgba(148, 163, 184, 0.35);
   background: #0f172a;
@@ -175,6 +190,11 @@ input {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.kiosk-brand h1 {
+  margin: 0;
+  font-size: clamp(34px, 4vw, 48px);
 }
 
 .logout-logo {
@@ -231,10 +251,22 @@ input {
   display: flex;
   gap: 24px;
   flex-wrap: wrap;
+  background: rgba(15, 23, 42, 0.38);
+}
+
+.hud p,
+.event-summary p {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background: rgba(15, 23, 42, 0.5);
 }
 
 .retro-note {
   color: #fde68a;
+  margin-top: 10px;
+  text-align: center;
 }
 
 .prevention-message {
@@ -282,10 +314,21 @@ input {
 
 .starter-card {
   text-align: center;
+  max-width: 440px;
+  margin: 10px auto 0;
 }
 
 .starter-card .qr-wrap.mini {
   margin-inline: auto;
+}
+
+.starter-sub {
+  color: #93c5fd;
+  margin-top: 4px;
+}
+
+.session-line {
+  opacity: 0.7;
 }
 
 .join-code {
@@ -320,7 +363,7 @@ input {
 .solo-stage {
   margin-top: 10px;
   width: 100%;
-  min-height: 420px;
+  min-height: 500px;
   border-radius: 12px;
   border: 1px dashed rgba(148, 163, 184, 0.4);
   background: rgba(2, 6, 23, 0.75);

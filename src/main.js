@@ -746,9 +746,9 @@ async function renderSoloKiosk() {
     .join('')
   app.innerHTML = `
     <main class="page kiosk-page">
-      <section class="card">
+      <section class="card kiosk-shell">
         <div class="row-between">
-          <div class="brand-lockup">
+          <div class="brand-lockup kiosk-brand">
             <span class="logout-logo">logout.org</span>
             <h1>QR Rush</h1>
           </div>
@@ -756,7 +756,7 @@ async function renderSoloKiosk() {
             <button id="toggle-fullscreen" class="btn primary">Fullscreen</button>
           </div>
         </div>
-        <div class="inline-form">
+        <div class="inline-form control-row">
           <label for="difficulty">Stopnja</label>
           <select id="difficulty">
             <option value="easy">Easy</option>
@@ -774,10 +774,11 @@ async function renderSoloKiosk() {
           <p>Iger odigranih: <strong id="event-games" class="stat-games">0</strong></p>
           <p>Razlicni udelezenci: <strong id="event-participants" class="stat-participants">0</strong></p>
         </section>
-        <p class="muted retro-note" id="meta">Igralec skenira zacetni QR in sam sprozi igro. Brez admin klikov med igro.</p>
+        <p class="muted retro-note" id="meta">Skeniraj zacetni QR za takojsnji start.</p>
         <section id="starter-card" class="card-sub starter-card">
           <h3>Zacetni QR (start igre)</h3>
-          <p class="small">Session: <code id="session-code">${kioskSessionId}</code></p>
+          <p class="small starter-sub">Prisloni telefon in ulovi ritem.</p>
+          <p class="small session-line">Session: <code id="session-code">${kioskSessionId}</code></p>
           <div class="qr-wrap mini"><img id="starter-qr" alt="Start game QR" /></div>
         </section>
         <details class="card-sub settings-toggle">
