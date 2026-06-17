@@ -994,6 +994,9 @@ async function renderSoloKiosk() {
   kioskSessionId = createKioskSessionId()
   const baseUrl = getQrBaseUrl()
   const activeThemeKey = getActiveThemeKey()
+  const introDwarvesHtml = DWARVES
+    .map((art, idx) => `<pre class="intro-dwarf-card" style="--intro-delay:${idx * 0.16}s">${art}</pre>`)
+    .join('')
   const themeOptions = Object.entries(MESSAGE_THEMES)
     .map(([key, theme]) => `<option value="${key}" ${key === activeThemeKey ? 'selected' : ''}>${theme.label}</option>`)
     .join('')
@@ -1025,7 +1028,7 @@ async function renderSoloKiosk() {
         <div id="kiosk-main-stage" class="solo-stage kiosk-main-stage">
           <p class="countdown stage-countdown" id="countdown"></p>
           <pre id="ascii-dwarf" class="ascii-dwarf stage-dwarf"></pre>
-          <section id="starter-card" class="card-sub starter-card stage-panel">
+          <section id="starter-card" class="card-sub starter-card stage-panel hidden">
             <h3>Zacetni QR (start igre)</h3>
             <p class="small starter-sub">Prisloni telefon in ulovi ritem.</p>
             <p class="small session-line">Session: <code id="session-code">${kioskSessionId}</code></p>
@@ -1042,6 +1045,11 @@ async function renderSoloKiosk() {
           <div id="solo-qr-node" class="monster-frame hidden">
             <img id="solo-qr" alt="Solo round QR" />
           </div>
+          <section id="kiosk-intro" class="kiosk-intro stage-panel">
+            <p class="intro-title">QR Rush Intro</p>
+            <div class="intro-dwarves">${introDwarvesHtml}</div>
+            <p class="small">Skrati vabijo v igro. Pripravi telefon!</p>
+          </section>
         </div>
         <details class="card-sub settings-toggle">
           <summary>Nastavitve kioska</summary>
@@ -1139,7 +1147,23 @@ async function renderSoloKiosk() {
   }
   updateSoloHud()
   renderKioskEventPanel()
+  await playKioskIntro()
   showKioskLeaderboardTemporarily(3000)
+}
+
+async function playKioskIntro() {
+  const overlay = document.querySelector('#kiosk-intro')
+  if (!overlay) return
+  const starter = document.querySelector('#starter-card')
+  const hint = document.querySelector('#hint')
+  overlay.classList.remove('hidden')
+  if (starter) starter.classList.add('hidden')
+  if (hint) hint.textContent = 'Skrati prihajajo ...'
+  await sleep(2400)
+  if (parseRoute().path !== '/solo-kiosk') return
+  overlay.classList.add('hidden')
+  if (!soloGameState.active && starter) starter.classList.remove('hidden')
+  if (!soloGameState.active && hint) hint.textContent = 'Skeniraj zacetni QR za start igre.'
 }
 
 async function renderStarterQr() {

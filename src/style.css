@@ -471,6 +471,53 @@ input {
   width: min(92%, 460px);
 }
 
+.kiosk-intro {
+  width: min(94%, 980px);
+  text-align: center;
+  border-color: rgba(94, 234, 212, 0.45);
+  background:
+    radial-gradient(circle at 20% 20%, rgba(45, 212, 191, 0.16), transparent 36%),
+    radial-gradient(circle at 80% 18%, rgba(56, 189, 248, 0.16), transparent 34%),
+    rgba(15, 23, 42, 0.9);
+  box-shadow:
+    0 0 0 2px rgba(56, 189, 248, 0.22),
+    0 0 26px rgba(45, 212, 191, 0.28);
+  z-index: 7;
+}
+
+.intro-title {
+  margin: 0 0 8px;
+  font-size: clamp(26px, 4vw, 44px);
+  font-weight: 900;
+  color: #99f6e4;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.intro-dwarves {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin: 8px 0 10px;
+}
+
+.intro-dwarf-card {
+  margin: 0;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px dashed rgba(94, 234, 212, 0.55);
+  background: rgba(2, 6, 23, 0.62);
+  color: #bef264;
+  white-space: pre;
+  font-family: Consolas, Menlo, monospace;
+  font-size: clamp(10px, 1vw, 12px);
+  line-height: 1.05;
+  opacity: 0;
+  transform: translateY(10px) scale(0.94);
+  animation: introDwarfPop 560ms ease-out forwards;
+  animation-delay: var(--intro-delay, 0s);
+}
+
 .stage-leaderboard {
   top: auto;
   bottom: 12px;
@@ -800,6 +847,17 @@ input {
   100% {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes introDwarfPop {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
 
