@@ -1217,6 +1217,46 @@ function decodePayload(payload) {
   return JSON.parse(decodeURIComponent(escape(atob(payload))))
 }
 
+function encodeClaimPayload(payload = {}) {
+  return encodePayload({
+    v: 1,
+    t: payload.type === 'solo-round' ? 's' : 'r',
+    s: payload.sessionId || '',
+    k: payload.tokenId || '',
+    x: payload.text || '',
+    b: payload.base || 0,
+    m: payload.mode || 'normal',
+    f: payload.focusMode || '',
+    p: payload.pointsMultiplier || 1,
+    g: payload.challengeShouldScan ? 1 : 0,
+    c: payload.createdAt || 0,
+    e: payload.expiresAt || 0,
+  })
+}
+
+function decodeClaimPayload(payloadRaw) {
+  const decoded = decodePayload(payloadRaw)
+  if (!decoded || typeof decoded !== 'object') return decoded
+  if (decoded.v === 1 && decoded.k) {
+    return {
+      type: decoded.t === 's' ? 'solo-round' : 'round',
+      sessionId: decoded.s || null,
+      tokenId: decoded.k,
+      text: decoded.x || '',
+      base: Number(decoded.b) || 0,
+      mode: decoded.m || 'normal',
+      focusMode: decoded.f || '',
+      pointsMultiplier: Number(decoded.p) || 1,
+      challengeShouldScan: decoded.g === 1,
+      challengePrompt: decoded.g === 1 ? 'ULOVI' : 'SPUSTI',
+      challengeDetails: decoded.g === 1 ? 'Skeniraj takoj.' : 'To rundo preskoci.',
+      createdAt: Number(decoded.c) || 0,
+      expiresAt: Number(decoded.e) || 0,
+    }
+  }
+  return decoded
+}
+
 function computePoints(payload, reactionMs) {
   const mode = DIFFICULTIES[payload.mode] || DIFFICULTIES.normal
   const clamped = Math.max(mode.minMs, Math.min(mode.maxMs, reactionMs))
@@ -1833,7 +1873,7 @@ function applySoloQrVisual() {
   const qrNode = document.querySelector('#solo-qr-node')
   if (!qr) return
   qr.style.width = `${soloVisualState.size}px`
-  qr.style.filter = `hue-rotate(${soloVisualState.hue}deg)`
+  qr.style.filter = 'none'
   if (qrNode) {
     qrNode.setAttribute('data-skin', `${soloSkinIndex}`)
     qrNode.style.setProperty('--skin-hue', `${soloVisualState.hue}deg`)
@@ -1871,15 +1911,15 @@ async function renderGoNoGoMultiQr({
     return {
       isTarget,
       payload,
-      url: `${base}#/claim?payload=${encodeURIComponent(encodePayload(payload))}`,
+      url: `${base}#/claim?payload=${encodeURIComponent(encodeClaimPayload(payload))}`,
     }
   })
   const qrDataUrls = await Promise.all(slots.map(async (slot) => QRCode.toDataURL(slot.url, {
-    errorCorrectionLevel: 'M',
-    margin: 1,
+    errorCorrectionLevel: 'L',
+    margin: 2,
     width: 192,
     color: {
-      dark: colorDark || '#0f172a',
+      dark: '#111111',
       light: '#ffffff',
     },
   })))
@@ -2008,13 +2048,13 @@ async function generateSoloToken(runId) {
   soloSkinIndex = (soloSkinIndex + 1) % 3
   let qrDataUrl = ''
   if (soloGameState.selectedMode !== 'go_nogo') {
-    const claimUrl = `${base}#/claim?payload=${encodeURIComponent(encodePayload(payload))}`
+    const claimUrl = `${base}#/claim?payload=${encodeURIComponent(encodeClaimPayload(payload))}`
     qrDataUrl = await QRCode.toDataURL(claimUrl, {
-      errorCorrectionLevel: 'M',
-      margin: 1,
+      errorCorrectionLevel: 'L',
+      margin: 2,
       width: 420,
       color: {
-        dark: hslToHex(soloVisualState.hue, 90, 35),
+        dark: '#111111',
         light: '#ffffff',
       },
     })
@@ -2621,7 +2661,7 @@ function renderClaim(params) {
 
   let payload
   try {
-    payload = decodePayload(payloadRaw)
+    payload = decodeClaimPayload(payloadRaw)
   } catch {
     app.innerHTML = `
       <main class="page"><section class="card"><h1>Claim napaka</h1><p>Payload ni veljaven.</p><button id="go-home" class="btn">Domov</button></section></main>
