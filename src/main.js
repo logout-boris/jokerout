@@ -1840,7 +1840,7 @@ async function renderGoNoGoMultiQr({
     qrGrid.innerHTML = slots
       .map((slot, idx) => `
         <article class="solo-qr-card ${slot.isTarget ? 'is-target' : 'is-decoy'}">
-          <p>${slot.isTarget ? 'ULOVI' : 'SPUSTI'}</p>
+          <p>${slot.isTarget ? 'ULOVI' : ''}</p>
           <img class="solo-qr-image" src="${qrDataUrls[idx]}" alt="${slot.isTarget ? 'Target QR' : 'Decoy QR'}" />
         </article>
       `)
