@@ -22,6 +22,7 @@ const STORAGE = {
   activeSessionId: 'joqr.player.activeSessionId',
   lastGameOverSummary: 'joqr.player.lastGameOverSummary',
   attentionThoughts: 'joqr.shared.attentionThoughts',
+  raffleEntries: 'joqr.shared.raffleEntries',
 }
 
 const DIFFICULTIES = {
@@ -36,6 +37,31 @@ const SOLO_LEVEL_CONFIGS = [
   { mode: 'hard', label: 'Level 3', ttlMs: 6500, qrSize: 160, speedMultiplier: 1.7 },
 ]
 const SOLO_MAX_LEVELS = SOLO_LEVEL_CONFIGS.length
+const FOCUS_MODES = {
+  reflex: {
+    label: 'Refleks',
+    subtitle: 'Hitri odzivi in dinamicno gibanje.',
+    ttlMultiplier: 0.85,
+    speedMultiplier: 1.2,
+    pointsMultiplier: 1.1,
+  },
+  focus: {
+    label: 'Fokus',
+    subtitle: 'Uravnotezen tempo za stabilno pozornost.',
+    ttlMultiplier: 1.0,
+    speedMultiplier: 1.0,
+    pointsMultiplier: 1.0,
+  },
+  precision: {
+    label: 'Preciznost',
+    subtitle: 'Malo vec casa, manjsa tarca in vecja natancnost.',
+    ttlMultiplier: 1.1,
+    speedMultiplier: 0.92,
+    pointsMultiplier: 1.08,
+    qrSizeMultiplier: 0.88,
+  },
+}
+const DEFAULT_FOCUS_MODE = 'focus'
 
 const MESSAGES = [
   { text: 'Mega ulov', base: 50 },
@@ -154,6 +180,7 @@ let playerSessionRealtimeChannel = null
 let activePlayerSessionId = ''
 let soloGameState = {
   active: false,
+  selectedMode: DEFAULT_FOCUS_MODE,
   lives: 3,
   level: 1,
   catches: 0,
@@ -170,9 +197,24 @@ function getSoloLevelConfig(level = 1) {
   return SOLO_LEVEL_CONFIGS[index] || SOLO_LEVEL_CONFIGS[0]
 }
 
-function getSoloMovementMultiplier(level = 1) {
+function getFocusMode(modeKey = DEFAULT_FOCUS_MODE) {
+  return FOCUS_MODES[modeKey] || FOCUS_MODES[DEFAULT_FOCUS_MODE]
+}
+
+function getSoloMovementMultiplier(level = 1, modeKey = DEFAULT_FOCUS_MODE) {
   const levelCfg = getSoloLevelConfig(level)
-  return levelCfg.speedMultiplier || 1
+  const modeCfg = getFocusMode(modeKey)
+  return (levelCfg.speedMultiplier || 1) * (modeCfg.speedMultiplier || 1)
+}
+
+function getStarterModeOptions(sessionId = '') {
+  const base = getQrBaseUrl()
+  return Object.entries(FOCUS_MODES).map(([key, mode]) => ({
+    key,
+    label: mode.label,
+    subtitle: mode.subtitle,
+    url: `${base}#/start?session=${encodeURIComponent(sessionId)}&mode=${encodeURIComponent(key)}`,
+  }))
 }
 
 function isPhonePlayerDevice() {
@@ -326,6 +368,19 @@ async function setupGlobalRealtime() {
       }
     }
   })
+  channel.on('broadcast', { event: 'raffle_entry' }, ({ payload }) => {
+    const entry = payload?.entry
+    if (!entry?.entryId) return
+    upsertRaffleEntry(entry)
+    if (parseRoute().path === '/solo-kiosk' && !soloGameState.active && soloPostGamePhase === 'invite') {
+      const hint = document.querySelector('#hint')
+      if (hint) hint.textContent = 'Hvala za sodelovanje v zrebanju. Resetiram kiosk ...'
+      if (soloPostGameAutoRestartTimer) clearTimeout(soloPostGameAutoRestartTimer)
+      soloPostGameAutoRestartTimer = setTimeout(() => {
+        showSoloRestartStarter()
+      }, 1400)
+    }
+  })
   await waitForChannelSubscribed(channel)
   globalRealtimeChannel = channel
 }
@@ -345,6 +400,7 @@ async function setupKioskRealtime(sessionId) {
         startSoloGame({
           playerId: payload?.playerId || '',
           playerName: payload?.playerName || 'Anon',
+          modeKey: payload?.modeKey || DEFAULT_FOCUS_MODE,
         })
       }, 1200)
     }
@@ -583,12 +639,20 @@ function renderSoloGameOver(summary = null, phase = 'result') {
   const avgLabel = summary.avgReactionMs > 0 ? formatReactionTime(summary.avgReactionMs) : 'n/a'
   const totalLabel = formatReactionTime(summary.totalPlayMs || 0)
   if (phase === 'invite') {
+    const inviteOptions = Array.isArray(summary.inviteOptions) ? summary.inviteOptions : []
+    const inviteCardsHtml = inviteOptions.map((option) => `
+      <article class="invite-option-card">
+        <h4>${escapeHtml(option.title)}</h4>
+        <p class="small">${escapeHtml(option.subtitle || '')}</p>
+        ${option.qrData
+          ? `<div class="qr-wrap mini"><img src="${option.qrData}" alt="${escapeHtml(option.title)} QR" /></div>`
+          : `<p class="small thought-fallback-link"><a href="${escapeHtml(option.url || '#')}" target="_blank" rel="noopener noreferrer">Odpri obrazec</a></p>`}
+      </article>
+    `).join('')
     panel.innerHTML = `
       <h3>Povabilo: postani delilec pozornosti</h3>
-      <p class="small">Skeniraj QR in dodaj lepo misel. Ta korak traja do 1 minute.</p>
-      ${summary.shareThoughtQr
-        ? `<div class="qr-wrap mini postgame-thought-qr-wrap"><img id="postgame-thought-qr" src="${summary.shareThoughtQr}" alt="QR za delilca pozornosti" /></div>`
-        : `<p class="small thought-fallback-link"><a href="${escapeHtml(summary.shareThoughtUrl || '#')}" target="_blank" rel="noopener noreferrer">Odpri obrazec za deljenje misli</a></p>`}
+      <p class="small">Izberi eno od treh poti in sodeluj v zrebanju. Korak traja do 1 minute.</p>
+      <div class="invite-options-grid">${inviteCardsHtml}</div>
       <p class="small">${escapeHtml(summary.invite || LOGOUT_STAND_INVITE)}</p>
     `
   } else {
@@ -622,7 +686,7 @@ function showSoloRestartStarter() {
   const restartStarter = document.querySelector('#starter-card')
   if (restartStarter) restartStarter.classList.remove('hidden')
   const restartHint = document.querySelector('#hint')
-  if (restartHint) restartHint.textContent = 'Za novo igro naj igralec skenira zacetni QR.'
+  if (restartHint) restartHint.textContent = 'Za novo igro izberi enega od treh zacetnih QR mode-ov.'
   soloPostGamePhase = ''
 }
 
@@ -641,7 +705,27 @@ function finishSoloGame(reason = 'gameover') {
   const motivationCore = randomThemeMessage(theme.prevention, 'Odklopi obvestila in uzivaj koncert.')
   const recipe = randomDigitalRecipe()
   const motivation = `logout.org: Ujel si ${catches} skratov, ki jemljejo pozornost. ${motivationCore}`
-  const shareThoughtUrl = `${getQrBaseUrl()}#/attention-share?session=${encodeURIComponent(kioskSessionId || '')}`
+  const base = getQrBaseUrl()
+  const inviteOptionsBase = [
+    {
+      id: 'thought',
+      title: '1. Deli lepo misel',
+      subtitle: 'Kratko sporocilo za ticker in zrebanje.',
+      url: `${base}#/attention-share?session=${encodeURIComponent(kioskSessionId || '')}&reward=thought`,
+    },
+    {
+      id: 'survey',
+      title: '2. Kratka anketa',
+      subtitle: 'Kako se soocas s pozornostjo + povprecni screen time (starost + spol).',
+      url: `${base}#/raffle-survey?session=${encodeURIComponent(kioskSessionId || '')}`,
+    },
+    {
+      id: 'recipe',
+      title: '3. Zahtevaj recept za fokus',
+      subtitle: 'Prevzemi konkretni recept za ohranjanje fokusa.',
+      url: `${base}#/focus-recipe?session=${encodeURIComponent(kioskSessionId || '')}`,
+    },
+  ]
   soloGameState.active = false
   if (soloGameState.currentScore > 0) {
     pushEventTopEntry({
@@ -716,8 +800,7 @@ function finishSoloGame(reason = 'gameover') {
       totalPlayMs,
       scienceInsight,
       completedAllLevels,
-      shareThoughtQr: '',
-      shareThoughtUrl,
+      inviteOptions: inviteOptionsBase,
       invite: LOGOUT_STAND_INVITE,
       resultMessage: motivation,
     }
@@ -727,12 +810,23 @@ function finishSoloGame(reason = 'gameover') {
     if (lateHint) lateHint.textContent = 'Konec igre ...'
     if (soloPostGameStarterTimer) clearTimeout(soloPostGameStarterTimer)
     soloPostGameStarterTimer = setTimeout(() => {
-      QRCode.toDataURL(shareThoughtUrl, { errorCorrectionLevel: 'M', margin: 1, width: 260 })
-        .then((qrData) => {
+      Promise.all(inviteOptionsBase.map(async (option) => {
+        try {
+          const qrData = await QRCode.toDataURL(option.url, {
+            errorCorrectionLevel: 'M',
+            margin: 1,
+            width: 260,
+          })
+          return { ...option, qrData }
+        } catch {
+          return { ...option, qrData: '' }
+        }
+      }))
+        .then((inviteOptions) => {
           soloPostGamePhase = 'invite'
           renderSoloGameOver({
             ...postGameSummary,
-            shareThoughtQr: qrData,
+            inviteOptions,
           }, 'invite')
         })
         .catch(() => {
@@ -751,11 +845,15 @@ function startSoloGame(player = null) {
   clearSoloTimers()
   soloRunNonce += 1
   currentSoloRound = null
+  const selectedMode = FOCUS_MODES[player?.modeKey] ? player.modeKey : DEFAULT_FOCUS_MODE
   const levelConfig = getSoloLevelConfig(1)
-  soloVisualState = { size: levelConfig.qrSize, hue: 0 }
+  const modeCfg = getFocusMode(selectedMode)
+  const initialSize = Math.max(96, Math.round(levelConfig.qrSize * (modeCfg.qrSizeMultiplier || 1)))
+  soloVisualState = { size: initialSize, hue: 0 }
   incrementEventGamesPlayed()
   soloGameState = {
     active: true,
+    selectedMode,
     lives: 3,
     level: 1,
     catches: 0,
@@ -952,10 +1050,73 @@ async function saveAttentionThought(thought) {
   return { realtimeOk, dbOk }
 }
 
+function getRaffleEntries() {
+  const rows = readJSON(STORAGE.raffleEntries, [])
+  return Array.isArray(rows) ? rows : []
+}
+
+function upsertRaffleEntry(entry) {
+  if (!entry?.entryId) return null
+  const rows = getRaffleEntries().filter((row) => row?.entryId !== entry.entryId)
+  rows.push(entry)
+  rows.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+  saveJSON(STORAGE.raffleEntries, rows.slice(0, 300))
+  return entry
+}
+
+async function registerRaffleEntry({
+  entryType = 'thought',
+  sessionId = '',
+  playerId = '',
+  playerName = 'Anon',
+  age = '',
+  gender = '',
+  payload = {},
+} = {}) {
+  const normalizedSession = String(sessionId || '').trim()
+  const normalizedPlayer = String(playerId || '').trim() || 'anon'
+  const normalizedType = String(entryType || 'thought').trim() || 'thought'
+  const entryId = `${normalizedSession || 'no-session'}:${normalizedPlayer}:${normalizedType}`
+  const raffleCode = generateCode(entryId, 6)
+  const entry = upsertRaffleEntry({
+    entryId,
+    sessionId: normalizedSession,
+    playerId: normalizedPlayer,
+    playerName: String(playerName || 'Anon').trim().slice(0, 24),
+    entryType: normalizedType,
+    age: String(age || '').trim().slice(0, 3),
+    gender: String(gender || '').trim().slice(0, 24),
+    payload,
+    raffleCode,
+    createdAt: Date.now(),
+  })
+  const realtimeOk = await sendGlobalEvent('raffle_entry', { entry })
+  let dbOk = false
+  try {
+    const { error } = await supabase.from('raffle_entries').insert({
+      entry_id: entry.entryId,
+      session_id: entry.sessionId || null,
+      player_id: entry.playerId,
+      player_name: entry.playerName,
+      entry_type: entry.entryType,
+      age: entry.age || null,
+      gender: entry.gender || null,
+      payload: entry.payload || {},
+      raffle_code: entry.raffleCode,
+      created_at: new Date(entry.createdAt).toISOString(),
+    })
+    dbOk = !error
+  } catch {
+    dbOk = false
+  }
+  return { raffleCode, realtimeOk, dbOk }
+}
+
 function resetEventData() {
   saveEventStats({ gamesPlayed: 0, participants: [] })
   saveJSON(STORAGE.eventTop20, [])
   saveJSON(STORAGE.attentionThoughts, [])
+  saveJSON(STORAGE.raffleEntries, [])
 }
 
 function encodePayload(data) {
@@ -971,7 +1132,9 @@ function computePoints(payload, reactionMs) {
   const clamped = Math.max(mode.minMs, Math.min(mode.maxMs, reactionMs))
   const ratio = 1 - (clamped - mode.minMs) / (mode.maxMs - mode.minMs)
   const speedBonus = Math.round(ratio * 75)
-  return Math.max(1, payload.base + speedBonus)
+  const basePoints = Math.max(1, payload.base + speedBonus)
+  const pointsMultiplier = Number(payload?.pointsMultiplier) || 1
+  return Math.max(1, Math.round(basePoints * pointsMultiplier))
 }
 
 function formatReactionTime(ms) {
@@ -1180,6 +1343,16 @@ async function renderSoloKiosk() {
   kioskSessionId = createKioskSessionId()
   const baseUrl = getQrBaseUrl()
   const activeThemeKey = getActiveThemeKey()
+  const starterModeOptions = getStarterModeOptions(kioskSessionId)
+  const starterModesHtml = starterModeOptions
+    .map((option) => `
+      <article class="starter-mode-card">
+        <h4>${option.label}</h4>
+        <p class="small">${option.subtitle}</p>
+        <div class="qr-wrap mini"><img id="starter-qr-${option.key}" alt="Start ${option.label} QR" /></div>
+      </article>
+    `)
+    .join('')
   const introDwarvesHtml = DWARVES
     .map((art, idx) => `<pre class="intro-dwarf-card" style="--intro-delay:${idx * 0.16}s">${art}</pre>`)
     .join('')
@@ -1207,15 +1380,15 @@ async function renderSoloKiosk() {
           <p>Iger odigranih: <strong id="event-games" class="stat-games">0</strong></p>
           <p>Razlicni udelezenci: <strong id="event-participants" class="stat-participants">0</strong></p>
         </section>
-        <p class="muted retro-note" id="meta">Skeniraj zacetni QR za takojsnji start.</p>
+        <p class="muted retro-note" id="meta">Skeniraj enega od zacetnih QR in izberi mode.</p>
         <div id="kiosk-main-stage" class="solo-stage kiosk-main-stage">
           <p class="countdown stage-countdown" id="countdown"></p>
           <pre id="ascii-dwarf" class="ascii-dwarf stage-dwarf"></pre>
           <section id="starter-card" class="card-sub starter-card stage-panel">
-            <h3>Zacetni QR (start igre)</h3>
-            <p class="small starter-sub">Prisloni telefon in ulovi ritem.</p>
+            <h3>Izberi mode in zacni igro</h3>
+            <p class="small starter-sub">Skeniraj enega od treh QR in zazeni svoj fokus izziv.</p>
             <p class="small session-line">Session: <code id="session-code">${kioskSessionId}</code></p>
-            <div class="qr-wrap mini"><img id="starter-qr" alt="Start game QR" /></div>
+            <div class="starter-mode-grid">${starterModesHtml}</div>
           </section>
           <section id="solo-result" class="card-sub stage-panel hidden"></section>
           <div id="solo-burst" class="solo-burst"></div>
@@ -1378,7 +1551,7 @@ async function playKioskIntro({ extended = false } = {}) {
     if (parseRoute().path === '/solo-kiosk') {
       overlay.classList.add('hidden')
       if (!soloGameState.active && starter) starter.classList.remove('hidden')
-      if (!soloGameState.active && hint) hint.textContent = 'Skeniraj zacetni QR za start igre.'
+      if (!soloGameState.active && hint) hint.textContent = 'Skeniraj enega od zacetnih QR in zacni igro.'
     }
     kioskIntroRunning = false
   }
@@ -1398,15 +1571,18 @@ function startKioskIdleIntroLoop() {
 }
 
 async function renderStarterQr() {
-  const target = document.querySelector('#starter-qr')
-  if (!target || !kioskSessionId) return
-  const startUrl = `${getQrBaseUrl()}#/start?session=${encodeURIComponent(kioskSessionId)}`
-  const qr = await QRCode.toDataURL(startUrl, {
-    errorCorrectionLevel: 'M',
-    margin: 1,
-    width: 360,
-  })
-  target.src = qr
+  if (!kioskSessionId) return
+  const options = getStarterModeOptions(kioskSessionId)
+  await Promise.all(options.map(async (option) => {
+    const target = document.querySelector(`#starter-qr-${option.key}`)
+    if (!target) return
+    const qr = await QRCode.toDataURL(option.url, {
+      errorCorrectionLevel: 'M',
+      margin: 1,
+      width: 300,
+    })
+    target.src = qr
+  }))
 }
 
 function stopSoloMovement() {
@@ -1424,13 +1600,13 @@ function stopSoloObstacles() {
   document.querySelectorAll('.solo-dwarf-obstacle').forEach((node) => node.remove())
 }
 
-function startSoloMovement(level = 1) {
+function startSoloMovement(level = 1, modeKey = DEFAULT_FOCUS_MODE) {
   stopSoloMovement()
   const stage = document.querySelector('#kiosk-main-stage') || document.querySelector('#solo-stage')
   const qrNode = document.querySelector('#solo-qr-node')
   if (!stage || !qrNode) return
 
-  const speed = getSoloMovementMultiplier(level)
+  const speed = getSoloMovementMultiplier(level, modeKey)
   let x = 20
   let y = 20
   let vx = 2.8 * speed
@@ -1556,9 +1732,10 @@ async function startSoloRound() {
 async function generateSoloToken(runId) {
   if (runId !== soloRunNonce) return
   const levelConfig = getSoloLevelConfig(soloGameState.level)
+  const focusMode = getFocusMode(soloGameState.selectedMode)
   const mode = levelConfig.mode
   const config = DIFFICULTIES[mode] || DIFFICULTIES.normal
-  const ttlMs = soloGameState.active ? levelConfig.ttlMs : levelConfig.ttlMs
+  const ttlMs = Math.max(1600, Math.round(levelConfig.ttlMs * (focusMode.ttlMultiplier || 1)))
   const message = MESSAGES[Math.floor(Math.random() * MESSAGES.length)]
   const now = Date.now()
   const tokenId = crypto.randomUUID ? crypto.randomUUID() : `token-${now}`
@@ -1569,8 +1746,10 @@ async function generateSoloToken(runId) {
     sessionId: kioskSessionId || null,
     tokenId,
     text: message.text,
-    base: message.base,
+    base: Math.round(message.base * (focusMode.pointsMultiplier || 1)),
     mode,
+    focusMode: soloGameState.selectedMode,
+    pointsMultiplier: focusMode.pointsMultiplier || 1,
     createdAt: now,
     expiresAt: now + ttlMs,
   }
@@ -1596,12 +1775,12 @@ async function generateSoloToken(runId) {
   const hint = document.querySelector('#hint')
   if (qr) qr.src = qrDataUrl
   if (qrNode) qrNode.classList.remove('hidden')
-  if (meta) meta.textContent = `Stopnja ${soloGameState.level}/${SOLO_MAX_LEVELS} (${config.label}) | Hitrost x${levelConfig.speedMultiplier.toFixed(2)} | Veljavnost: ${(ttlMs / 1000).toFixed(1)} s`
+  if (meta) meta.textContent = `Stopnja ${soloGameState.level}/${SOLO_MAX_LEVELS} (${config.label}) | Mode: ${focusMode.label} | Hitrost x${getSoloMovementMultiplier(soloGameState.level, soloGameState.selectedMode).toFixed(2)} | Veljavnost: ${(ttlMs / 1000).toFixed(1)} s`
   if (hint) hint.textContent = 'Skeniraj QR in na telefonu prejmi zabavno sporocilo.'
   if (countEl) countEl.textContent = ''
   if (asciiEl) asciiEl.textContent = ''
   applySoloQrVisual()
-  startSoloMovement(soloGameState.level)
+  startSoloMovement(soloGameState.level, soloGameState.selectedMode)
   startSoloObstacles(soloGameState.level)
   updateSoloHud()
 
@@ -1634,8 +1813,9 @@ function confirmSoloCatch() {
   if (!completedAllLevels) {
     soloGameState.level += 1
     const nextConfig = getSoloLevelConfig(soloGameState.level)
+    const activeMode = getFocusMode(soloGameState.selectedMode)
     soloVisualState = {
-      size: nextConfig.qrSize,
+      size: Math.max(96, Math.round(nextConfig.qrSize * (activeMode.qrSizeMultiplier || 1))),
       hue: (soloVisualState.hue + 75) % 360,
     }
     applySoloQrVisual()
@@ -2234,6 +2414,9 @@ function renderClaim(params) {
 
 function renderStart(params) {
   const sessionId = params.get('session')
+  const modeKeyRaw = String(params.get('mode') || DEFAULT_FOCUS_MODE)
+  const modeKey = FOCUS_MODES[modeKeyRaw] ? modeKeyRaw : DEFAULT_FOCUS_MODE
+  const modeLabel = getFocusMode(modeKey).label
   const profile = getPlayerProfile()
   if (sessionId) {
     saveJSON(STORAGE.activeSessionId, sessionId)
@@ -2247,6 +2430,7 @@ function renderStart(params) {
       <section class="card">
         <h1>Start signal</h1>
         <p>Igra se pripravlja na kiosku.</p>
+        <p class="small">Izbran mode: <strong>${modeLabel}</strong></p>
         <p class="small">Session: <code>${sessionId || 'n/a'}</code></p>
         <p class="small">Igralec: <strong>${profile.name || 'Anon'}</strong></p>
         <div class="actions">
@@ -2265,6 +2449,7 @@ function renderStart(params) {
   sendSessionEvent(sessionId, 'start_game', {
     playerId: profile.id,
     playerName: profile.name || 'Anon',
+    modeKey,
   })
     .then(() => {
       if (status) status.textContent = 'Signal poslan. Poglej kiosk zaslon.'
@@ -2339,6 +2524,7 @@ function renderAttentionShare(params) {
             <button id="attention-go-player" type="button" class="btn">Moji rezultati</button>
           </div>
           <p id="attention-status" class="small muted"></p>
+          <p id="attention-raffle" class="survey-code hidden"></p>
           <p class="small muted">Session: <code>${escapeHtml(sessionId || 'n/a')}</code></p>
         </form>
       </section>
@@ -2348,6 +2534,7 @@ function renderAttentionShare(params) {
   document.querySelector('#attention-share-form')?.addEventListener('submit', async (event) => {
     event.preventDefault()
     const status = document.querySelector('#attention-status')
+    const raffleEl = document.querySelector('#attention-raffle')
     const nameInput = document.querySelector('#attention-name')
     const textInput = document.querySelector('#attention-text')
     const author = String(nameInput?.value || profile.name || 'Anon').trim().slice(0, 24)
@@ -2366,16 +2553,141 @@ function renderAttentionShare(params) {
     }
     if (status) status.textContent = 'Objavljam ...'
     const saveResult = await saveAttentionThought(thought)
+    const raffleResult = await registerRaffleEntry({
+      entryType: 'thought',
+      sessionId,
+      playerId: profile.id,
+      playerName: author || 'Anon',
+      payload: { thought: text.slice(0, 180) },
+    })
     if (status) {
       if (saveResult.realtimeOk) {
-        status.textContent = 'Hvala! Tvoja misel zdaj tece na kiosku.'
+        status.textContent = 'Hvala! Tvoja misel zdaj tece na kiosku in sodelujes v zrebanju.'
       } else if (saveResult.dbOk) {
-        status.textContent = 'Misel je shranjena. Kiosk osvezi stran, ce se ticker ne posodobi.'
+        status.textContent = 'Misel je shranjena. Kiosk osvezi stran, ce se ticker ne posodobi. Zrebanje je evidentirano.'
       } else {
-        status.textContent = 'Misel je lokalno oddana, a povezava do kioska ni uspela. Poskusi znova.'
+        status.textContent = 'Misel je lokalno oddana, a povezava do kioska ni uspela. Zrebanje je vseeno evidentirano.'
       }
     }
-    setTimeout(() => navigate('/player'), 1100)
+    if (raffleEl) {
+      raffleEl.classList.remove('hidden')
+      raffleEl.innerHTML = `Koda za zrebanje: <strong>${raffleResult.raffleCode}</strong>`
+    }
+  })
+}
+
+function renderRaffleSurvey(params) {
+  const profile = getPlayerProfile()
+  const sessionId = String(params.get('session') || '').trim()
+  app.innerHTML = `
+    <main class="page">
+      <section class="card">
+        <h1>Kratka anketa za zrebanje</h1>
+        <p class="small">Od osebnih podatkov zberemo samo starost in spol.</p>
+        <form id="raffle-survey-form" class="focus-survey">
+          <label>Starost
+            <input id="raffle-age" type="number" min="10" max="99" placeholder="npr. 17" required />
+          </label>
+          <label>Spol
+            <select id="raffle-gender" required>
+              <option value="">Izberi...</option>
+              <option value="zenski">Zenski</option>
+              <option value="moski">Moski</option>
+              <option value="drugo">Drugo</option>
+              <option value="brez_odgovora">Brez odgovora</option>
+            </select>
+          </label>
+          <label>Kako se najlazje vrnes v fokus?
+            <select id="focus-habit" required>
+              <option value="">Izberi...</option>
+              <option value="mikro_pavza">Kratka pavza brez telefona</option>
+              <option value="ugasnem_notife">Ugasnem notifikacije</option>
+              <option value="casovni_blok">Casovni blok brez prekinitev</option>
+              <option value="drugo">Drugo</option>
+            </select>
+          </label>
+          <label>Povprecni dnevni screen time (ure)
+            <input id="focus-screen-hours" type="number" min="0.5" max="16" step="0.1" placeholder="npr. 4.5" required />
+          </label>
+          <div class="actions">
+            <button type="submit" class="btn primary">Oddaj in sodeluj v zrebanju</button>
+            <button id="raffle-survey-player" type="button" class="btn">Moji rezultati</button>
+          </div>
+          <p id="raffle-survey-status" class="small muted"></p>
+          <p id="raffle-survey-code" class="survey-code hidden"></p>
+          <p class="small muted">Session: <code>${escapeHtml(sessionId || 'n/a')}</code></p>
+        </form>
+      </section>
+    </main>
+  `
+  document.querySelector('#raffle-survey-player')?.addEventListener('click', () => navigate('/player'))
+  document.querySelector('#raffle-survey-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault()
+    const status = document.querySelector('#raffle-survey-status')
+    const codeEl = document.querySelector('#raffle-survey-code')
+    const age = String(document.querySelector('#raffle-age')?.value || '').trim()
+    const gender = String(document.querySelector('#raffle-gender')?.value || '').trim()
+    const focusHabit = String(document.querySelector('#focus-habit')?.value || '').trim()
+    const screenHours = String(document.querySelector('#focus-screen-hours')?.value || '').trim()
+    if (!age || !gender || !focusHabit || !screenHours) {
+      if (status) status.textContent = 'Prosim, izpolni vsa polja.'
+      return
+    }
+    if (status) status.textContent = 'Oddajam ...'
+    const result = await registerRaffleEntry({
+      entryType: 'survey',
+      sessionId,
+      playerId: profile.id,
+      playerName: profile.name || 'Anon',
+      age,
+      gender,
+      payload: { focusHabit, screenHours },
+    })
+    if (status) status.textContent = 'Hvala! Sodelujes v zrebanju.'
+    if (codeEl) {
+      codeEl.classList.remove('hidden')
+      codeEl.innerHTML = `Koda za zrebanje: <strong>${result.raffleCode}</strong>`
+    }
+  })
+}
+
+function renderFocusRecipe(params) {
+  const profile = getPlayerProfile()
+  const sessionId = String(params.get('session') || '').trim()
+  const recipe = randomDigitalRecipe()
+  app.innerHTML = `
+    <main class="page">
+      <section class="card">
+        <h1>Recept za ohranjanje fokusa</h1>
+        <p class="recipe-line"><strong>Tvoj recept:</strong> ${escapeHtml(recipe)}</p>
+        <p class="small">Klikni spodaj in ta opcija se steje kot prijava v zrebanje.</p>
+        <div class="actions">
+          <button id="claim-recipe-raffle" class="btn primary">Sodeluj v zrebanju</button>
+          <button id="recipe-player" class="btn">Moji rezultati</button>
+        </div>
+        <p id="recipe-status" class="small muted"></p>
+        <p id="recipe-code" class="survey-code hidden"></p>
+        <p class="small muted">Session: <code>${escapeHtml(sessionId || 'n/a')}</code></p>
+      </section>
+    </main>
+  `
+  document.querySelector('#recipe-player')?.addEventListener('click', () => navigate('/player'))
+  document.querySelector('#claim-recipe-raffle')?.addEventListener('click', async () => {
+    const status = document.querySelector('#recipe-status')
+    const codeEl = document.querySelector('#recipe-code')
+    if (status) status.textContent = 'Oddajam ...'
+    const result = await registerRaffleEntry({
+      entryType: 'recipe',
+      sessionId,
+      playerId: profile.id,
+      playerName: profile.name || 'Anon',
+      payload: { recipe },
+    })
+    if (status) status.textContent = 'Super! Sodelujes v zrebanju.'
+    if (codeEl) {
+      codeEl.classList.remove('hidden')
+      codeEl.innerHTML = `Koda za zrebanje: <strong>${result.raffleCode}</strong>`
+    }
   })
 }
 
@@ -2434,6 +2746,20 @@ function render() {
       // Share page still works with local fallback.
     })
     renderAttentionShare(params)
+    return
+  }
+  if (path === '/raffle-survey') {
+    setupGlobalRealtime().catch(() => {
+      // Survey page still works with local fallback.
+    })
+    renderRaffleSurvey(params)
+    return
+  }
+  if (path === '/focus-recipe') {
+    setupGlobalRealtime().catch(() => {
+      // Recipe page still works with local fallback.
+    })
+    renderFocusRecipe(params)
     return
   }
   renderHome()
