@@ -217,6 +217,15 @@ function getStarterModeOptions(sessionId = '') {
   }))
 }
 
+function shuffleArray(values = []) {
+  const arr = [...values]
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[arr[i], arr[j]] = [arr[j], arr[i]]
+  }
+  return arr
+}
+
 function buildSoloChallenge(modeKey, level = 1, nBackHistory = []) {
   if (modeKey === 'go_nogo') {
     const action = Math.random() < 0.68 ? 'go' : 'nogo'
@@ -463,7 +472,9 @@ async function setupKioskRealtime(sessionId) {
     if (payload?.sessionId !== kioskSessionId) return
     if (!soloGameState.active) return
     if (!payload?.playerId || payload.playerId !== soloGameState.currentPlayerId) return
-    if (!currentSoloRound || currentSoloRound.tokenId !== payload?.tokenId) return
+    if (!currentSoloRound) return
+    const roundTokenIds = Array.isArray(currentSoloRound.roundTokenIds) ? currentSoloRound.roundTokenIds : [currentSoloRound.tokenId]
+    if (!roundTokenIds.includes(payload?.tokenId)) return
     if (soloRoundExpiryTimer) {
       clearTimeout(soloRoundExpiryTimer)
       soloRoundExpiryTimer = null
@@ -824,9 +835,16 @@ function finishSoloGame(reason = 'gameover') {
     : { freq: 180, durationMs: 300, volume: 0.07, type: 'sawtooth' })
   const hint = document.querySelector('#hint')
   if (hint) hint.textContent = completedAllLevels ? 'KONEC IGRE' : 'GAME OVER'
+  document.querySelectorAll('.solo-qr-image').forEach((img) => img.removeAttribute('src'))
   const qr = document.querySelector('#solo-qr')
-  if (qr) qr.removeAttribute('src')
+  const qrGrid = document.querySelector('#solo-qr-grid')
   const qrNode = document.querySelector('#solo-qr-node')
+  if (qr) qr.classList.remove('hidden')
+  if (qrGrid) {
+    qrGrid.innerHTML = ''
+    qrGrid.classList.add('hidden')
+  }
+  if (qrNode) qrNode.classList.remove('go-nogo-multi')
   if (qrNode) qrNode.classList.add('hidden')
   const banner = document.querySelector('#catch-banner')
   if (banner) banner.classList.add('hidden')
@@ -1471,7 +1489,8 @@ async function renderSoloKiosk() {
           <div id="gameover-banner" class="gameover-banner hidden">GAME OVER</div>
           <div id="catch-banner" class="catch-banner hidden">UJETO!</div>
           <div id="solo-qr-node" class="monster-frame hidden">
-            <img id="solo-qr" alt="Solo round QR" />
+            <div id="solo-qr-grid" class="solo-qr-grid hidden"></div>
+            <img id="solo-qr" class="solo-qr-image solo-qr-single" alt="Solo round QR" />
           </div>
           <section id="kiosk-intro" class="kiosk-intro stage-panel">
             <p class="intro-title" id="intro-title">Ulovi kradljivce pozornosti in postani delilec pozornosti</p>
@@ -1771,6 +1790,72 @@ function applySoloQrVisual() {
   }
 }
 
+async function renderGoNoGoMultiQr({
+  base,
+  now,
+  ttlMs,
+  mode,
+  message,
+  pointsMultiplier,
+  shouldScan,
+  colorDark,
+} = {}) {
+  const slotFlags = shouldScan ? shuffleArray([true, false, false]) : [false, false, false]
+  const slots = slotFlags.map((isTarget, index) => {
+    const tokenId = crypto.randomUUID ? crypto.randomUUID() : `token-${now}-${index}`
+    const payload = {
+      type: 'solo-round',
+      sessionId: kioskSessionId || null,
+      tokenId,
+      text: message.text,
+      base: Math.round(message.base * pointsMultiplier),
+      mode,
+      focusMode: 'go_nogo',
+      pointsMultiplier,
+      challengeShouldScan: isTarget,
+      challengePrompt: isTarget ? 'ULOVI' : 'SPUSTI',
+      challengeDetails: isTarget ? 'Skeniraj samo QR z zelenim okvirjem.' : 'Rdece QR kode preskoci.',
+      createdAt: now,
+      expiresAt: now + ttlMs,
+    }
+    return {
+      isTarget,
+      payload,
+      url: `${base}#/claim?payload=${encodeURIComponent(encodePayload(payload))}`,
+    }
+  })
+  const qrDataUrls = await Promise.all(slots.map(async (slot) => QRCode.toDataURL(slot.url, {
+    errorCorrectionLevel: 'M',
+    margin: 1,
+    width: 240,
+    color: {
+      dark: colorDark || '#0f172a',
+      light: '#ffffff',
+    },
+  })))
+  const qrGrid = document.querySelector('#solo-qr-grid')
+  const singleQr = document.querySelector('#solo-qr')
+  const qrNode = document.querySelector('#solo-qr-node')
+  if (qrGrid) {
+    qrGrid.innerHTML = slots
+      .map((slot, idx) => `
+        <article class="solo-qr-card ${slot.isTarget ? 'is-target' : 'is-decoy'}">
+          <p>${slot.isTarget ? 'ULOVI' : 'SPUSTI'}</p>
+          <img class="solo-qr-image" src="${qrDataUrls[idx]}" alt="${slot.isTarget ? 'Target QR' : 'Decoy QR'}" />
+        </article>
+      `)
+      .join('')
+    qrGrid.classList.remove('hidden')
+  }
+  if (singleQr) singleQr.classList.add('hidden')
+  if (qrNode) qrNode.classList.add('go-nogo-multi')
+  const primaryPayload = slots.find((slot) => slot.isTarget)?.payload || slots[0]?.payload || null
+  return {
+    primaryPayload,
+    roundTokenIds: slots.map((slot) => slot.payload.tokenId),
+  }
+}
+
 function triggerSoloBurst() {
   const burst = document.querySelector('#solo-burst')
   if (!burst) return
@@ -1785,9 +1870,16 @@ async function startSoloRound() {
   const asciiEl = document.querySelector('#ascii-dwarf')
   const cue = document.querySelector('#challenge-cue')
   const qr = document.querySelector('#solo-qr')
+  const qrGrid = document.querySelector('#solo-qr-grid')
   const qrNode = document.querySelector('#solo-qr-node')
   const hint = document.querySelector('#hint')
-  if (qr) qr.removeAttribute('src')
+  document.querySelectorAll('.solo-qr-image').forEach((img) => img.removeAttribute('src'))
+  if (qrGrid) {
+    qrGrid.innerHTML = ''
+    qrGrid.classList.add('hidden')
+  }
+  if (qr) qr.classList.remove('hidden')
+  if (qrNode) qrNode.classList.remove('go-nogo-multi')
   if (qrNode) qrNode.classList.add('hidden')
   if (countEl) {
     countEl.classList.remove('is-go', 'is-nogo', 'is-stroop', 'is-nback')
@@ -1852,16 +1944,19 @@ async function generateSoloToken(runId) {
 
   currentSoloRound = payload
   soloSkinIndex = (soloSkinIndex + 1) % 3
-  const claimUrl = `${base}#/claim?payload=${encodeURIComponent(encodePayload(payload))}`
-  const qrDataUrl = await QRCode.toDataURL(claimUrl, {
-    errorCorrectionLevel: 'M',
-    margin: 1,
-    width: 420,
-    color: {
-      dark: hslToHex(soloVisualState.hue, 90, 35),
-      light: '#ffffff',
-    },
-  })
+  let qrDataUrl = ''
+  if (soloGameState.selectedMode !== 'go_nogo') {
+    const claimUrl = `${base}#/claim?payload=${encodeURIComponent(encodePayload(payload))}`
+    qrDataUrl = await QRCode.toDataURL(claimUrl, {
+      errorCorrectionLevel: 'M',
+      margin: 1,
+      width: 420,
+      color: {
+        dark: hslToHex(soloVisualState.hue, 90, 35),
+        light: '#ffffff',
+      },
+    })
+  }
 
   const qr = document.querySelector('#solo-qr')
   const qrNode = document.querySelector('#solo-qr-node')
@@ -1872,7 +1967,26 @@ async function generateSoloToken(runId) {
   const cue = document.querySelector('#challenge-cue')
   const cuePrompt = document.querySelector('#challenge-prompt')
   const cueDetails = document.querySelector('#challenge-details')
-  if (qr) qr.src = qrDataUrl
+  if (soloGameState.selectedMode === 'go_nogo') {
+    const goNoGoRound = await renderGoNoGoMultiQr({
+      base,
+      now,
+      ttlMs,
+      mode,
+      message,
+      pointsMultiplier: focusMode.pointsMultiplier || 1,
+      shouldScan: challenge.shouldScan,
+      colorDark: hslToHex(soloVisualState.hue, 90, 35),
+    })
+    if (goNoGoRound?.primaryPayload) {
+      currentSoloRound = {
+        ...goNoGoRound.primaryPayload,
+        roundTokenIds: goNoGoRound.roundTokenIds || [],
+      }
+    }
+  } else if (qr) {
+    qr.src = qrDataUrl
+  }
   if (qrNode) qrNode.classList.remove('hidden')
   if (meta) meta.textContent = `Stopnja ${soloGameState.level}/${SOLO_MAX_LEVELS} (${config.label}) | Mode: ${focusMode.label} | Pravilo: ${challenge.prompt} | Hitrost x${getSoloMovementMultiplier(soloGameState.level, soloGameState.selectedMode).toFixed(2)} | Veljavnost: ${(ttlMs / 1000).toFixed(1)} s`
   if (hint) hint.textContent = challenge.details
@@ -1905,7 +2019,9 @@ async function generateSoloToken(runId) {
     }
   }
   if (asciiEl) asciiEl.textContent = ''
-  applySoloQrVisual()
+  if (soloGameState.selectedMode !== 'go_nogo') {
+    applySoloQrVisual()
+  }
   startSoloMovement(soloGameState.level, soloGameState.selectedMode)
   startSoloObstacles(soloGameState.level)
   updateSoloHud()

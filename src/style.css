@@ -901,6 +901,14 @@ input {
   top: 20px;
 }
 
+#solo-qr-node.go-nogo-multi {
+  padding: 16px;
+}
+
+#solo-qr-node.go-nogo-multi::before {
+  top: -44px;
+}
+
 #solo-qr {
   width: 190px;
   display: block;
@@ -908,6 +916,52 @@ input {
   z-index: 2;
   transition: width 0.25s ease;
   filter: hue-rotate(0deg);
+}
+
+.solo-qr-grid {
+  width: min(78vw, 760px);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.solo-qr-card {
+  padding: 8px;
+  border-radius: 10px;
+  border: 3px solid rgba(148, 163, 184, 0.4);
+  background: rgba(15, 23, 42, 0.65);
+}
+
+.solo-qr-card p {
+  margin: 0 0 8px;
+  text-align: center;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.solo-qr-card.is-target {
+  border-color: rgba(134, 239, 172, 0.85);
+  box-shadow: 0 0 18px rgba(134, 239, 172, 0.38);
+}
+
+.solo-qr-card.is-target p {
+  color: #86efac;
+}
+
+.solo-qr-card.is-decoy {
+  border-color: rgba(253, 164, 175, 0.75);
+}
+
+.solo-qr-card.is-decoy p {
+  color: #fda4af;
+}
+
+.solo-qr-image {
+  display: block;
+  width: 100%;
+  background: #fff;
+  border-radius: 6px;
 }
 
 .solo-dwarf-obstacle {
