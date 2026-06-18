@@ -38,30 +38,29 @@ const SOLO_LEVEL_CONFIGS = [
 ]
 const SOLO_MAX_LEVELS = SOLO_LEVEL_CONFIGS.length
 const FOCUS_MODES = {
-  reflex: {
-    label: 'Refleks',
-    subtitle: 'Hitri odzivi in dinamicno gibanje.',
+  go_nogo: {
+    label: 'Go / No-Go',
+    subtitle: 'Skeniraj samo QR z oznako ULOVI.',
     ttlMultiplier: 0.85,
-    speedMultiplier: 1.2,
+    speedMultiplier: 1.05,
+    pointsMultiplier: 1.08,
+  },
+  stroop: {
+    label: 'Stroop QR',
+    subtitle: 'Skeniraj samo, ko se beseda in barva ujemata.',
+    ttlMultiplier: 0.95,
+    speedMultiplier: 1.0,
     pointsMultiplier: 1.1,
   },
-  focus: {
-    label: 'Fokus',
-    subtitle: 'Uravnotezen tempo za stabilno pozornost.',
+  nback: {
+    label: 'N-back light',
+    subtitle: 'Skeniraj samo, ko se simbol ujema z 1-back/2-back.',
     ttlMultiplier: 1.0,
-    speedMultiplier: 1.0,
-    pointsMultiplier: 1.0,
-  },
-  precision: {
-    label: 'Preciznost',
-    subtitle: 'Malo vec casa, manjsa tarca in vecja natancnost.',
-    ttlMultiplier: 1.1,
-    speedMultiplier: 0.92,
-    pointsMultiplier: 1.08,
-    qrSizeMultiplier: 0.88,
+    speedMultiplier: 0.98,
+    pointsMultiplier: 1.12,
   },
 }
-const DEFAULT_FOCUS_MODE = 'focus'
+const DEFAULT_FOCUS_MODE = 'go_nogo'
 
 const MESSAGES = [
   { text: 'Mega ulov', base: 50 },
@@ -190,6 +189,7 @@ let soloGameState = {
   gameStartedAt: 0,
   totalReactionMs: 0,
   reactionsCount: 0,
+  nBackHistory: [],
 }
 
 function getSoloLevelConfig(level = 1) {
@@ -215,6 +215,46 @@ function getStarterModeOptions(sessionId = '') {
     subtitle: mode.subtitle,
     url: `${base}#/start?session=${encodeURIComponent(sessionId)}&mode=${encodeURIComponent(key)}`,
   }))
+}
+
+function buildSoloChallenge(modeKey, level = 1, nBackHistory = []) {
+  if (modeKey === 'go_nogo') {
+    const action = Math.random() < 0.68 ? 'go' : 'nogo'
+    const shouldScan = action === 'go'
+    return {
+      shouldScan,
+      prompt: shouldScan ? 'ULOVI' : 'SPUSTI',
+      details: shouldScan ? 'Skeniraj takoj.' : 'Ne skeniraj - pocakaj naslednjo rundo.',
+    }
+  }
+  if (modeKey === 'stroop') {
+    const colors = [
+      { name: 'RDECA', hue: 0 },
+      { name: 'MODRA', hue: 220 },
+      { name: 'ZELENA', hue: 120 },
+      { name: 'RUMENA', hue: 55 },
+    ]
+    const wordColor = colors[Math.floor(Math.random() * colors.length)]
+    const inkColor = colors[Math.floor(Math.random() * colors.length)]
+    const shouldScan = wordColor.name === inkColor.name
+    return {
+      shouldScan,
+      prompt: wordColor.name,
+      details: `Barva okvirja: ${inkColor.name} (${shouldScan ? 'UJEMANJE' : 'NE UJEMANJE'})`,
+      hue: inkColor.hue,
+    }
+  }
+  const symbols = ['A', 'B', 'C', 'D']
+  const distance = level >= 2 ? 2 : 1
+  const symbol = symbols[Math.floor(Math.random() * symbols.length)]
+  const shouldScan = nBackHistory.length >= distance && nBackHistory[nBackHistory.length - distance] === symbol
+  return {
+    shouldScan,
+    prompt: `${distance}-BACK ${symbol}`,
+    details: shouldScan ? `Ujemanje z ${distance}-back: SKENIRAJ` : `Ni ujemanja z ${distance}-back: SPUSTI`,
+    symbol,
+    distance,
+  }
 }
 
 function isPhonePlayerDevice() {
@@ -418,6 +458,26 @@ async function setupKioskRealtime(sessionId) {
     renderKioskEventPanel()
     if (currentSoloRound?.tokenId !== payload?.tokenId) return
     confirmSoloCatch()
+  })
+  channel.on('broadcast', { event: 'mistake' }, ({ payload }) => {
+    if (payload?.sessionId !== kioskSessionId) return
+    if (!soloGameState.active) return
+    if (!payload?.playerId || payload.playerId !== soloGameState.currentPlayerId) return
+    if (!currentSoloRound || currentSoloRound.tokenId !== payload?.tokenId) return
+    if (soloRoundExpiryTimer) {
+      clearTimeout(soloRoundExpiryTimer)
+      soloRoundExpiryTimer = null
+    }
+    currentSoloRound = null
+    soloGameState.lives -= 1
+    updateSoloHud()
+    if (soloGameState.lives <= 0) {
+      finishSoloGame('gameover')
+      return
+    }
+    const hintEl = document.querySelector('#hint')
+    if (hintEl) hintEl.textContent = `Napaka! Izguba zivljenja. Ostala zivljenja: ${soloGameState.lives}.`
+    startSoloRound()
   })
   await waitForChannelSubscribed(channel)
   kioskRealtimeChannel = channel
@@ -863,6 +923,7 @@ function startSoloGame(player = null) {
     gameStartedAt: Date.now(),
     totalReactionMs: 0,
     reactionsCount: 0,
+    nBackHistory: [],
   }
   const result = document.querySelector('#solo-result')
   if (result) {
@@ -1733,6 +1794,14 @@ async function generateSoloToken(runId) {
   if (runId !== soloRunNonce) return
   const levelConfig = getSoloLevelConfig(soloGameState.level)
   const focusMode = getFocusMode(soloGameState.selectedMode)
+  const challenge = buildSoloChallenge(soloGameState.selectedMode, soloGameState.level, soloGameState.nBackHistory)
+  if (soloGameState.selectedMode === 'stroop' && Number.isFinite(challenge.hue)) {
+    soloVisualState.hue = challenge.hue
+  }
+  if (soloGameState.selectedMode === 'nback' && challenge.symbol) {
+    soloGameState.nBackHistory.push(challenge.symbol)
+    if (soloGameState.nBackHistory.length > 8) soloGameState.nBackHistory = soloGameState.nBackHistory.slice(-8)
+  }
   const mode = levelConfig.mode
   const config = DIFFICULTIES[mode] || DIFFICULTIES.normal
   const ttlMs = Math.max(1600, Math.round(levelConfig.ttlMs * (focusMode.ttlMultiplier || 1)))
@@ -1750,6 +1819,9 @@ async function generateSoloToken(runId) {
     mode,
     focusMode: soloGameState.selectedMode,
     pointsMultiplier: focusMode.pointsMultiplier || 1,
+    challengeShouldScan: challenge.shouldScan,
+    challengePrompt: challenge.prompt,
+    challengeDetails: challenge.details,
     createdAt: now,
     expiresAt: now + ttlMs,
   }
@@ -1775,8 +1847,8 @@ async function generateSoloToken(runId) {
   const hint = document.querySelector('#hint')
   if (qr) qr.src = qrDataUrl
   if (qrNode) qrNode.classList.remove('hidden')
-  if (meta) meta.textContent = `Stopnja ${soloGameState.level}/${SOLO_MAX_LEVELS} (${config.label}) | Mode: ${focusMode.label} | Hitrost x${getSoloMovementMultiplier(soloGameState.level, soloGameState.selectedMode).toFixed(2)} | Veljavnost: ${(ttlMs / 1000).toFixed(1)} s`
-  if (hint) hint.textContent = 'Skeniraj QR in na telefonu prejmi zabavno sporocilo.'
+  if (meta) meta.textContent = `Stopnja ${soloGameState.level}/${SOLO_MAX_LEVELS} (${config.label}) | Mode: ${focusMode.label} | Pravilo: ${challenge.prompt} | Hitrost x${getSoloMovementMultiplier(soloGameState.level, soloGameState.selectedMode).toFixed(2)} | Veljavnost: ${(ttlMs / 1000).toFixed(1)} s`
+  if (hint) hint.textContent = challenge.details
   if (countEl) countEl.textContent = ''
   if (asciiEl) asciiEl.textContent = ''
   applySoloQrVisual()
@@ -1787,6 +1859,12 @@ async function generateSoloToken(runId) {
   if (soloRoundExpiryTimer) clearTimeout(soloRoundExpiryTimer)
   soloRoundExpiryTimer = setTimeout(() => {
     if (!currentSoloRound || currentSoloRound.tokenId !== tokenId) return
+    if (soloGameState.active && currentSoloRound.challengeShouldScan === false) {
+      const hintEl = document.querySelector('#hint')
+      if (hintEl) hintEl.textContent = 'Pravilno: SPUSTI.'
+      confirmSoloCatch({ fromSkip: true })
+      return
+    }
     if (soloGameState.active) {
       soloGameState.lives -= 1
       updateSoloHud()
@@ -1801,7 +1879,7 @@ async function generateSoloToken(runId) {
   }, ttlMs + 50)
 }
 
-function confirmSoloCatch() {
+function confirmSoloCatch({ fromSkip = false } = {}) {
   if (!soloGameState.active || !currentSoloRound) return
   if (soloRoundExpiryTimer) {
     clearTimeout(soloRoundExpiryTimer)
@@ -1832,7 +1910,9 @@ function confirmSoloCatch() {
   updateSoloHud()
   currentSoloRound = null
   const hint = document.querySelector('#hint')
-  if (hint) hint.textContent = completedAllLevels ? 'Bravo! Zakljucil si vse stopnje.' : 'Bravo, nova runda!'
+  if (hint) hint.textContent = completedAllLevels
+    ? 'Bravo! Zakljucil si vse stopnje.'
+    : (fromSkip ? 'Pravilna odlocitev, nova runda!' : 'Bravo, nova runda!')
   const prevention = document.querySelector('#prevention-message')
   if (prevention) {
     const theme = MESSAGE_THEMES[getActiveThemeKey()]
@@ -2335,6 +2415,37 @@ function renderClaim(params) {
     title = 'Prepozno'
     status = 'QR je potekel: 0 tock'
   } else {
+    if (payload.challengeShouldScan === false) {
+      title = 'Napacen ulov'
+      status = `Ta runda je bila SPUSTI (${payload.challengePrompt || 'SPUSTI'}). Izguba zivljenja.`
+      addClaimedToken(payload.tokenId)
+      if (payload.sessionId) {
+        sendSessionEvent(payload.sessionId, 'mistake', {
+          tokenId: payload.tokenId,
+          playerId: profile.id,
+          playerName: profile.name || 'Anon',
+          reason: 'wrong_scan',
+        }).catch(() => {
+          // Keep claim UX resilient even if realtime send fails.
+        })
+      }
+      app.innerHTML = `
+        <main class="page">
+          <section class="card">
+            <h1>${title}</h1>
+            <p>${status}</p>
+            <p class="muted">Pravilo: ${payload.challengeDetails || 'Sledi navodilom mode-a.'}</p>
+            <div class="actions">
+              <button id="go-player" class="btn primary">Moji rezultati</button>
+              <button id="go-home" class="btn">Domov</button>
+            </div>
+          </section>
+        </main>
+      `
+      document.querySelector('#go-home')?.addEventListener('click', () => navigate('/'))
+      document.querySelector('#go-player')?.addEventListener('click', () => navigate('/player'))
+      return
+    }
     const reactionMs = Math.max(0, now - payload.createdAt)
     points = computePoints(payload, reactionMs)
     reactionLabel = formatReactionTime(reactionMs)
