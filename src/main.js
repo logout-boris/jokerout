@@ -1840,7 +1840,7 @@ async function renderGoNoGoMultiQr({
     qrGrid.innerHTML = slots
       .map((slot, idx) => `
         <article class="solo-qr-card ${slot.isTarget ? 'is-target' : 'is-decoy'}">
-          <p>${slot.isTarget ? 'ULOVI' : ''}</p>
+          ${slot.isTarget ? '<span class="solo-qr-target-dot" aria-hidden="true"></span>' : ''}
           <img class="solo-qr-image" src="${qrDataUrls[idx]}" alt="${slot.isTarget ? 'Target QR' : 'Decoy QR'}" />
         </article>
       `)
@@ -1990,32 +1990,40 @@ async function generateSoloToken(runId) {
   if (qrNode) qrNode.classList.remove('hidden')
   if (meta) meta.textContent = `Stopnja ${soloGameState.level}/${SOLO_MAX_LEVELS} (${config.label}) | Mode: ${focusMode.label} | Pravilo: ${challenge.prompt} | Hitrost x${getSoloMovementMultiplier(soloGameState.level, soloGameState.selectedMode).toFixed(2)} | Veljavnost: ${(ttlMs / 1000).toFixed(1)} s`
   if (hint) hint.textContent = challenge.details
-  if (cue && cuePrompt && cueDetails) {
-    cuePrompt.textContent = challenge.prompt
-    cueDetails.textContent = challenge.details
-    cuePrompt.style.color = ''
-    cue.classList.remove('hidden', 'is-go', 'is-nogo', 'is-stroop', 'is-nback')
-    if (soloGameState.selectedMode === 'go_nogo') {
-      cue.classList.add(challenge.shouldScan ? 'is-go' : 'is-nogo')
-    } else if (soloGameState.selectedMode === 'stroop') {
-      cue.classList.add('is-stroop')
-      cuePrompt.style.color = Number.isFinite(challenge.hue) ? hslToHex(challenge.hue, 95, 72) : ''
-    } else {
-      cue.classList.add('is-nback')
-      cuePrompt.style.color = ''
+  if (soloGameState.selectedMode === 'go_nogo') {
+    if (cue) {
+      cue.classList.add('hidden')
+      cue.classList.remove('is-go', 'is-nogo', 'is-stroop', 'is-nback')
     }
-  }
-  if (countEl) {
-    countEl.textContent = challenge.prompt
-    countEl.classList.remove('is-go', 'is-nogo', 'is-stroop', 'is-nback')
-    if (soloGameState.selectedMode === 'go_nogo') {
-      countEl.classList.add(challenge.shouldScan ? 'is-go' : 'is-nogo')
-    } else if (soloGameState.selectedMode === 'stroop') {
-      countEl.classList.add('is-stroop')
-      countEl.style.color = Number.isFinite(challenge.hue) ? hslToHex(challenge.hue, 95, 72) : ''
-    } else {
-      countEl.classList.add('is-nback')
+    if (countEl) {
+      countEl.textContent = ''
+      countEl.classList.remove('is-go', 'is-nogo', 'is-stroop', 'is-nback')
       countEl.style.color = ''
+    }
+    if (hint) hint.textContent = 'Go/No-Go: skeniraj samo QR z zelenim okvirjem.'
+  } else {
+    if (cue && cuePrompt && cueDetails) {
+      cuePrompt.textContent = challenge.prompt
+      cueDetails.textContent = challenge.details
+      cuePrompt.style.color = ''
+      cue.classList.remove('hidden', 'is-go', 'is-nogo', 'is-stroop', 'is-nback')
+      if (soloGameState.selectedMode === 'stroop') {
+        cue.classList.add('is-stroop')
+        cuePrompt.style.color = Number.isFinite(challenge.hue) ? hslToHex(challenge.hue, 95, 72) : ''
+      } else {
+        cue.classList.add('is-nback')
+      }
+    }
+    if (countEl) {
+      countEl.textContent = challenge.prompt
+      countEl.classList.remove('is-go', 'is-nogo', 'is-stroop', 'is-nback')
+      if (soloGameState.selectedMode === 'stroop') {
+        countEl.classList.add('is-stroop')
+        countEl.style.color = Number.isFinite(challenge.hue) ? hslToHex(challenge.hue, 95, 72) : ''
+      } else {
+        countEl.classList.add('is-nback')
+        countEl.style.color = ''
+      }
     }
   }
   if (asciiEl) asciiEl.textContent = ''
