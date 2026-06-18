@@ -339,6 +339,12 @@ input {
   margin: 0 auto;
 }
 
+#starter-card.stage-panel {
+  width: min(96%, 1180px);
+  max-height: 92%;
+  overflow: auto;
+}
+
 .starter-card .qr-wrap.mini {
   width: min(100%, 256px);
   margin-inline: auto;
@@ -346,7 +352,7 @@ input {
 
 .starter-mode-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   margin-top: 8px;
 }
