@@ -1701,6 +1701,56 @@ function startSoloMovement(level = 1, modeKey = DEFAULT_FOCUS_MODE) {
   const qrNode = document.querySelector('#solo-qr-node')
   if (!stage || !qrNode) return
 
+  if (modeKey === 'go_nogo') {
+    const cards = Array.from(qrNode.querySelectorAll('.solo-qr-card'))
+    if (!cards.length) return
+    const speed = getSoloMovementMultiplier(level, modeKey)
+    const stageRect = stage.getBoundingClientRect()
+    const movers = cards.map((card, idx) => {
+      const baseSize = Math.max(132, Math.round(soloVisualState.size * 0.8))
+      const cardWidth = Math.max(132, Math.min(220, baseSize))
+      card.style.width = `${cardWidth}px`
+      card.style.position = 'absolute'
+      const maxStartX = Math.max(0, stageRect.width - cardWidth)
+      const maxStartY = Math.max(0, stageRect.height - cardWidth - 40)
+      const startX = Math.round(Math.random() * maxStartX)
+      const startY = Math.round(Math.random() * maxStartY)
+      card.style.left = `${startX}px`
+      card.style.top = `${startY}px`
+      const dirX = idx % 2 === 0 ? 1 : -1
+      const dirY = idx % 3 === 0 ? -1 : 1
+      return {
+        node: card,
+        x: startX,
+        y: startY,
+        vx: (2.2 + idx * 0.35) * speed * dirX,
+        vy: (1.9 + idx * 0.28) * speed * dirY,
+      }
+    })
+
+    soloMoveTimer = setInterval(() => {
+      const stageRect = stage.getBoundingClientRect()
+      movers.forEach((mover) => {
+        const nodeRect = mover.node.getBoundingClientRect()
+        const maxX = Math.max(0, stageRect.width - nodeRect.width)
+        const maxY = Math.max(0, stageRect.height - nodeRect.height)
+        mover.x += mover.vx
+        mover.y += mover.vy
+        if (mover.x <= 0 || mover.x >= maxX) {
+          mover.vx *= -1
+          mover.x = Math.max(0, Math.min(mover.x, maxX))
+        }
+        if (mover.y <= 0 || mover.y >= maxY) {
+          mover.vy *= -1
+          mover.y = Math.max(0, Math.min(mover.y, maxY))
+        }
+        mover.node.style.left = `${Math.round(mover.x)}px`
+        mover.node.style.top = `${Math.round(mover.y)}px`
+      })
+    }, 24)
+    return
+  }
+
   const speed = getSoloMovementMultiplier(level, modeKey)
   let x = 20
   let y = 20
@@ -1827,7 +1877,7 @@ async function renderGoNoGoMultiQr({
   const qrDataUrls = await Promise.all(slots.map(async (slot) => QRCode.toDataURL(slot.url, {
     errorCorrectionLevel: 'M',
     margin: 1,
-    width: 240,
+    width: 192,
     color: {
       dark: colorDark || '#0f172a',
       light: '#ffffff',
@@ -1848,7 +1898,13 @@ async function renderGoNoGoMultiQr({
     qrGrid.classList.remove('hidden')
   }
   if (singleQr) singleQr.classList.add('hidden')
-  if (qrNode) qrNode.classList.add('go-nogo-multi')
+  if (qrNode) {
+    qrNode.classList.add('go-nogo-multi')
+    qrNode.style.border = '0'
+    qrNode.style.background = 'transparent'
+    qrNode.style.boxShadow = 'none'
+    qrNode.style.padding = '0'
+  }
   const primaryPayload = slots.find((slot) => slot.isTarget)?.payload || slots[0]?.payload || null
   return {
     primaryPayload,
@@ -1879,7 +1935,13 @@ async function startSoloRound() {
     qrGrid.classList.add('hidden')
   }
   if (qr) qr.classList.remove('hidden')
-  if (qrNode) qrNode.classList.remove('go-nogo-multi')
+  if (qrNode) {
+    qrNode.classList.remove('go-nogo-multi')
+    qrNode.style.removeProperty('border')
+    qrNode.style.removeProperty('background')
+    qrNode.style.removeProperty('box-shadow')
+    qrNode.style.removeProperty('padding')
+  }
   if (qrNode) qrNode.classList.add('hidden')
   if (countEl) {
     countEl.classList.remove('is-go', 'is-nogo', 'is-stroop', 'is-nback')
