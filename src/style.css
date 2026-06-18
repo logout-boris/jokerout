@@ -108,6 +108,22 @@ p {
   text-align: center;
 }
 
+.countdown.is-go {
+  color: #86efac;
+}
+
+.countdown.is-nogo {
+  color: #fda4af;
+}
+
+.countdown.is-stroop {
+  text-shadow: 0 0 8px rgba(147, 197, 253, 0.7);
+}
+
+.countdown.is-nback {
+  color: #fde68a;
+}
+
 .ascii-dwarf {
   margin-top: 8px;
   padding: 10px;
@@ -543,9 +559,67 @@ input {
   transform: translateX(-50%);
 }
 
-.stage-dwarf {
+.challenge-cue {
   position: absolute;
   top: 58px;
+  left: 50%;
+  z-index: 6;
+  transform: translateX(-50%);
+  width: min(92%, 760px);
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  background: rgba(15, 23, 42, 0.82);
+  text-align: center;
+}
+
+.challenge-prompt {
+  margin: 0;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: clamp(22px, 3vw, 38px);
+}
+
+.challenge-details {
+  margin: 3px 0 0;
+  color: #cbd5e1;
+  font-size: 14px;
+}
+
+.challenge-cue.is-go {
+  border-color: rgba(134, 239, 172, 0.6);
+  background: rgba(20, 83, 45, 0.42);
+}
+
+.challenge-cue.is-go .challenge-prompt {
+  color: #86efac;
+}
+
+.challenge-cue.is-nogo {
+  border-color: rgba(253, 164, 175, 0.6);
+  background: rgba(127, 29, 29, 0.38);
+}
+
+.challenge-cue.is-nogo .challenge-prompt {
+  color: #fda4af;
+}
+
+.challenge-cue.is-stroop {
+  border-color: rgba(147, 197, 253, 0.58);
+}
+
+.challenge-cue.is-nback {
+  border-color: rgba(250, 204, 21, 0.58);
+}
+
+.challenge-cue.is-nback .challenge-prompt {
+  color: #fde68a;
+}
+
+.stage-dwarf {
+  position: absolute;
+  top: 134px;
   left: 50%;
   z-index: 6;
   margin: 0;

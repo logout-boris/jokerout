@@ -747,6 +747,8 @@ function showSoloRestartStarter() {
   if (restartStarter) restartStarter.classList.remove('hidden')
   const restartHint = document.querySelector('#hint')
   if (restartHint) restartHint.textContent = 'Za novo igro izberi enega od treh zacetnih QR mode-ov.'
+  const cue = document.querySelector('#challenge-cue')
+  if (cue) cue.classList.add('hidden')
   soloPostGamePhase = ''
 }
 
@@ -829,9 +831,18 @@ function finishSoloGame(reason = 'gameover') {
   const banner = document.querySelector('#catch-banner')
   if (banner) banner.classList.add('hidden')
   const countEl = document.querySelector('#countdown')
-  if (countEl) countEl.textContent = ''
+  if (countEl) {
+    countEl.textContent = ''
+    countEl.classList.remove('is-go', 'is-nogo', 'is-stroop', 'is-nback')
+    countEl.style.color = ''
+  }
   const asciiEl = document.querySelector('#ascii-dwarf')
   if (asciiEl) asciiEl.textContent = ''
+  const cue = document.querySelector('#challenge-cue')
+  if (cue) {
+    cue.classList.add('hidden')
+    cue.classList.remove('is-go', 'is-nogo', 'is-stroop', 'is-nback')
+  }
   const starter = document.querySelector('#starter-card')
   if (starter) {
     starter.classList.add('hidden')
@@ -1444,6 +1455,10 @@ async function renderSoloKiosk() {
         <p class="muted retro-note" id="meta">Skeniraj enega od zacetnih QR in izberi mode.</p>
         <div id="kiosk-main-stage" class="solo-stage kiosk-main-stage">
           <p class="countdown stage-countdown" id="countdown"></p>
+          <section id="challenge-cue" class="challenge-cue hidden">
+            <p id="challenge-prompt" class="challenge-prompt"></p>
+            <p id="challenge-details" class="challenge-details"></p>
+          </section>
           <pre id="ascii-dwarf" class="ascii-dwarf stage-dwarf"></pre>
           <section id="starter-card" class="card-sub starter-card stage-panel">
             <h3>Izberi mode in zacni igro</h3>
@@ -1768,11 +1783,20 @@ async function startSoloRound() {
   const runId = ++soloRunNonce
   const countEl = document.querySelector('#countdown')
   const asciiEl = document.querySelector('#ascii-dwarf')
+  const cue = document.querySelector('#challenge-cue')
   const qr = document.querySelector('#solo-qr')
   const qrNode = document.querySelector('#solo-qr-node')
   const hint = document.querySelector('#hint')
   if (qr) qr.removeAttribute('src')
   if (qrNode) qrNode.classList.add('hidden')
+  if (countEl) {
+    countEl.classList.remove('is-go', 'is-nogo', 'is-stroop', 'is-nback')
+    countEl.style.color = ''
+  }
+  if (cue) {
+    cue.classList.add('hidden')
+    cue.classList.remove('is-go', 'is-nogo', 'is-stroop', 'is-nback')
+  }
   stopSoloMovement()
   stopSoloObstacles()
   if (hint) hint.textContent = 'Pripravi telefon...'
@@ -1845,11 +1869,41 @@ async function generateSoloToken(runId) {
   const countEl = document.querySelector('#countdown')
   const asciiEl = document.querySelector('#ascii-dwarf')
   const hint = document.querySelector('#hint')
+  const cue = document.querySelector('#challenge-cue')
+  const cuePrompt = document.querySelector('#challenge-prompt')
+  const cueDetails = document.querySelector('#challenge-details')
   if (qr) qr.src = qrDataUrl
   if (qrNode) qrNode.classList.remove('hidden')
   if (meta) meta.textContent = `Stopnja ${soloGameState.level}/${SOLO_MAX_LEVELS} (${config.label}) | Mode: ${focusMode.label} | Pravilo: ${challenge.prompt} | Hitrost x${getSoloMovementMultiplier(soloGameState.level, soloGameState.selectedMode).toFixed(2)} | Veljavnost: ${(ttlMs / 1000).toFixed(1)} s`
   if (hint) hint.textContent = challenge.details
-  if (countEl) countEl.textContent = ''
+  if (cue && cuePrompt && cueDetails) {
+    cuePrompt.textContent = challenge.prompt
+    cueDetails.textContent = challenge.details
+    cuePrompt.style.color = ''
+    cue.classList.remove('hidden', 'is-go', 'is-nogo', 'is-stroop', 'is-nback')
+    if (soloGameState.selectedMode === 'go_nogo') {
+      cue.classList.add(challenge.shouldScan ? 'is-go' : 'is-nogo')
+    } else if (soloGameState.selectedMode === 'stroop') {
+      cue.classList.add('is-stroop')
+      cuePrompt.style.color = Number.isFinite(challenge.hue) ? hslToHex(challenge.hue, 95, 72) : ''
+    } else {
+      cue.classList.add('is-nback')
+      cuePrompt.style.color = ''
+    }
+  }
+  if (countEl) {
+    countEl.textContent = challenge.prompt
+    countEl.classList.remove('is-go', 'is-nogo', 'is-stroop', 'is-nback')
+    if (soloGameState.selectedMode === 'go_nogo') {
+      countEl.classList.add(challenge.shouldScan ? 'is-go' : 'is-nogo')
+    } else if (soloGameState.selectedMode === 'stroop') {
+      countEl.classList.add('is-stroop')
+      countEl.style.color = Number.isFinite(challenge.hue) ? hslToHex(challenge.hue, 95, 72) : ''
+    } else {
+      countEl.classList.add('is-nback')
+      countEl.style.color = ''
+    }
+  }
   if (asciiEl) asciiEl.textContent = ''
   applySoloQrVisual()
   startSoloMovement(soloGameState.level, soloGameState.selectedMode)
