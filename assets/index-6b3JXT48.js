@@ -102,8 +102,8 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
       <section class="card kiosk-shell">
         <div class="row-between">
           <div class="brand-lockup kiosk-brand">
-            <span class="logout-logo">logout.org</span>
-            <h1>Lovilec pozornosti</h1>
+            <img class="logout-logo-image" src="/logout-logo.png" alt="LOGOUT" />
+            <h1>Igre pozornosti</h1>
           </div>
           <div class="actions row-actions">
             <button id="toggle-fullscreen" class="btn primary">Fullscreen</button>
