@@ -136,7 +136,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
         <p class="muted">Brez backenda je ID lokalni (reset ob brisanju browser podatkov).</p>
       </section>
     </main>
-  `,document.querySelector(`#go-kiosk`)?.addEventListener(`click`,()=>Y(`/solo-kiosk`)),document.querySelector(`#go-player`)?.addEventListener(`click`,()=>Y(`/player`)),document.querySelector(`#save-name`)?.addEventListener(`click`,()=>{sc(document.querySelector(`#player-name`).value),zl()})}async function nl(){let e=++Wo;Ys(),Ro&&=(clearInterval(Ro),null),zo=!1,I.classList.add(`kiosk-app`),G=hs();let t=`starter-qr-${ds(G)[0]?.key||po}`,n=_o.map((e,t)=>`<pre class="intro-dwarf-card" style="--intro-delay:${t*.16}s">${e}</pre>`).join(``);I.innerHTML=`
+  `,document.querySelector(`#go-kiosk`)?.addEventListener(`click`,()=>Y(`/solo-kiosk`)),document.querySelector(`#go-player`)?.addEventListener(`click`,()=>Y(`/player`)),document.querySelector(`#save-name`)?.addEventListener(`click`,()=>{sc(document.querySelector(`#player-name`).value),zl()})}async function nl(){let e=++Wo;Ys(),Ro&&=(clearInterval(Ro),null),zo=!1,I.classList.add(`kiosk-app`),G=hs();let t=`starter-qr-${ds(G)[0]?.key||po}`,n=_o.map((e,t)=>`<pre class="intro-dwarf-card" style="--intro-delay:${t*.16}s; --intro-wander-duration:${(2.2+t%3*.45).toFixed(2)}s; --intro-shift:${6+t%4*3}px">${e}</pre>`).join(``);I.innerHTML=`
     <main class="page kiosk-page">
       <section class="card kiosk-shell">
         <div class="row-between">
